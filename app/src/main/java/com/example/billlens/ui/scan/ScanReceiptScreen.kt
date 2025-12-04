@@ -34,7 +34,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.util.Log
+import androidx.camera.core.ImageProxy
+import androidx.compose.ui.semantics.text
 import com.example.billlens.ui.scan.CameraPreview
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -143,4 +148,35 @@ fun CameraPreview() {
         },
         modifier = Modifier.fillMaxSize()
     )
+}
+
+
+// Classe dedicata per l'analisi dell'immagine con ML Kit
+private class TextAnalyzer : ImageAnalysis.Analyzer {
+
+    @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+    override fun analyze(imageProxy: ImageProxy) {
+        val mediaImage = imageProxy.image
+        if (mediaImage != null) {
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    // Per adesso, stampiamo il testo riconosciuto nel log.
+                    // Puoi aggiungere un debounce qui per non loggare troppo frequentemente.
+                    if (visionText.text.isNotBlank()) {
+                        Log.d("TextAnalyzer", "Testo Riconosciuto: ${visionText.text}")
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e("TextAnalyzer", "Riconoscimento testo fallito", e)
+                }
+                .addOnCompleteListener {
+                    // Chiudi sempre l'imageProxy al termine dell'analisi,
+                    // altrimenti CameraX smetterà di fornire nuovi frame.
+                    imageProxy.close()
+                }
+        }
+    }
 }
