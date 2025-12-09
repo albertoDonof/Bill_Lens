@@ -8,13 +8,20 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
+import androidx.navigation.navArgument
+import com.example.billlens.domain.scan.ScanReceiptViewModel
 import com.example.billlens.ui.home.HomeScreen
 import com.example.billlens.ui.scan.ScanReceiptScreen
+import com.example.billlens.ui.scan.TextResultScreen
 
 // Placeholder per le altre schermate
 // Aggiorna le altre schermate per accettare il NavController
@@ -58,7 +65,7 @@ fun SettingsScreen(navController: NavHostController) {
     }
 }
 
-
+const val SCAN_GRAPH_ROUTE = "scan_graph"
 /**
  * Definisce il grafo di navigazione e associa ogni route a un Composable.
  */
@@ -77,12 +84,36 @@ fun AppNavigation(navController: NavHostController) {
         composable(NavigationScreens.Settings.route) {
             SettingsScreen(navController = navController) // Sostituisci con la tua vera schermata
         }
-        // Aggiungi qui altre destinazioni che non sono nella bottom bar,
-        // ad esempio la schermata di dettaglio di una spesa.
-        composable(NavigationScreens.ScanReceipt.route) {
-            ScanReceiptScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+
+        navigation(
+            startDestination = NavigationScreens.ScanReceipt.route,
+            route = SCAN_GRAPH_ROUTE
+        ) {
+            composable(NavigationScreens.ScanReceipt.route) { backStackEntry ->
+                // Il ViewModel viene associato al grafo genitore "scan_graph"
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(SCAN_GRAPH_ROUTE)
+                }
+                val scanViewModel = hiltViewModel<ScanReceiptViewModel>(parentEntry)
+
+                ScanReceiptScreen(
+                    navController = navController,
+                    viewModel = scanViewModel
+                )
+            }
+
+            composable(NavigationScreens.TextResult.route) { backStackEntry ->
+                // Anche qui, il ViewModel viene recuperato dal grafo genitore "scan_graph"
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry(SCAN_GRAPH_ROUTE)
+                }
+                val scanViewModel = hiltViewModel<ScanReceiptViewModel>(parentEntry)
+
+                TextResultScreen(
+                    viewModel = scanViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }

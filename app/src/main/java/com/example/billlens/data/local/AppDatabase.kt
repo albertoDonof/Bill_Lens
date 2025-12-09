@@ -28,7 +28,7 @@ abstract class AppDatabase : RoomDatabase(){
                     AppDatabase::class.java,
                     "bill_lens_database"
                 )
-                    .fallbackToDestructiveMigration(false) // Semplice strategia di migrazione per ora
+                    .fallbackToDestructiveMigration() // Semplice strategia di migrazione per ora
                     .build()
                 INSTANCE = instance
                 // return instance

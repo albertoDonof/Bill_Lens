@@ -6,6 +6,9 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.vector.ImageVector
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import kotlin.io.path.name
 
 // Rinominato da Screen a NavigationScreens
 sealed class NavigationScreens(val route: String, val title: String, val icon: ImageVector) {
@@ -13,4 +16,6 @@ sealed class NavigationScreens(val route: String, val title: String, val icon: I
     data object Stats : NavigationScreens("stats", "Statistiche", Icons.Default.Star)
     data object Settings : NavigationScreens("settings", "Impostazioni", Icons.Default.Settings)
     data object ScanReceipt : NavigationScreens("scan_receipt", "Scansione", Icons.Default.AccountCircle)
+
+    data object TextResult : NavigationScreens("text_result", "Risultato" /*...*/, Icons.Default.Star)
 }

@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -33,9 +35,11 @@ import com.example.billlens.ui.components.MonthlySummary
 import com.example.billlens.ui.components.UserHeader
 import com.example.billlens.ui.navigation.AppBottomNavigationBar
 import com.example.billlens.ui.navigation.NavigationScreens
+import com.example.billlens.ui.navigation.SCAN_GRAPH_ROUTE
 import java.math.BigDecimal
 import java.util.Date
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -76,18 +80,23 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            // L'UserHeader ora può far parte della TopAppBar
-            UserHeader(
-                userName = uiState.userName ?: "Utente",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            TopAppBar(
+                title = {
+                    // L'UserHeader ora può far parte della TopAppBar
+                    UserHeader(
+                        userName = uiState.userName ?: "Utente",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
             )
+
         },
         bottomBar = {
             AppBottomNavigationBar(navController = navController)
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { navController.navigate(NavigationScreens.ScanReceipt.route) }
+                onClick = { navController.navigate(SCAN_GRAPH_ROUTE) }
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Scansiona Scontrino")
             }
@@ -131,6 +140,7 @@ fun HomeScreenContent(
         modifier = modifier
             .fillMaxSize()
     ) {
+        Spacer(modifier = Modifier.height(24.dp))
         // 1. Riepilogo spese del mese
         MonthlySummary(
             total = monthlyTotal,
