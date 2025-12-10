@@ -2,6 +2,7 @@ package com.example.billlens.ui.scan
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
@@ -69,6 +70,10 @@ import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.regex.Pattern
+import android.graphics.Matrix
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,6 +87,7 @@ fun ScanReceiptScreen(
 
     // Ascolta gli eventi di navigazione "one-shot" dal ViewModel
     LaunchedEffect(Unit) {
+        viewModel.onNewScanRequested()
         viewModel.navigationEvent.collect { event ->
             when (event) {
                 // Ora navighiamo a una route semplice, senza passare argomenti.
@@ -144,10 +150,20 @@ fun ScanReceiptScreen(
                         .clip(RoundedCornerShape(16.dp)) // Angoli arrotondati
                         .background(Color.Black)
                 ) {
-                    CameraPreview(
-                        onTextRecognized = viewModel::onTextRecognized,
-                        setCaptureFunction = viewModel::setCaptureFunction
-                    )
+                    if (uiState.frozenBitmap != null) {
+                        Image(
+                            bitmap = uiState.frozenBitmap!!.asImageBitmap(),
+                            contentDescription = "Ultimo frame catturato",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        CameraPreview(
+                            onTextRecognized = viewModel::onTextRecognized,
+                            setCaptureFunction = viewModel::setCaptureFunction,
+                            onAnalysisStarted = viewModel::onAnalysisStarted
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -192,30 +208,13 @@ fun ScanReceiptScreen(
 @Composable
 fun CameraPreview(
     onTextRecognized: (String) -> Unit,
-    setCaptureFunction: (() -> Unit) -> Unit
+    setCaptureFunction: (() -> Unit) -> Unit,
+    onAnalysisStarted: (Bitmap?) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val imageCapture = remember { ImageCapture.Builder().build() }
-
-    LaunchedEffect(imageCapture) {
-        val executor = ContextCompat.getMainExecutor(context)
-        val captureFunc = {
-            imageCapture.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
-                override fun onCaptureSuccess(imageProxy: ImageProxy) {
-                    Log.d("CameraPreview", "Foto scattata con successo!")
-                    analyzeImage(imageProxy, onTextRecognized)
-                }
-
-                override fun onError(exception: ImageCaptureException) {
-                    Log.e("CameraPreview", "Errore nello scatto della foto", exception)
-                    onTextRecognized("Errore nello scatto: ${exception.message}")
-                }
-            })
-        }
-        setCaptureFunction(captureFunc)
-    }
 
     AndroidView(
         factory = { ctx ->
@@ -223,6 +222,33 @@ fun CameraPreview(
                 scaleType = PreviewView.ScaleType.FILL_CENTER
             }
             val executor = ContextCompat.getMainExecutor(ctx)
+
+            val captureFunc: () -> Unit = {
+                imageCapture.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
+                    override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                        Log.d("CameraPreview", "Foto scattata con successo!")
+
+                        // --- MODIFICA CHIAVE QUI ---
+                        // 1. Converti l'ImageProxy in un Bitmap ruotato correttamente.
+                        val bitmap = imageProxyToBitmap(imageProxy)
+
+                        // 2. Notifica la UI che l'analisi è iniziata, passando il Bitmap
+                        //    dell'immagine catturata per "congelare" la UI.
+                        onAnalysisStarted(bitmap)
+
+                        // 3. Esegui l'analisi sull'ImageProxy originale (o sul bitmap).
+                        //    Passare imageProxy è più efficiente se analyzeImage lo supporta.
+                        analyzeImage(imageProxy, onTextRecognized)
+                    }
+
+                    override fun onError(exception: ImageCaptureException) {
+                        Log.e("CameraPreview", "Errore nello scatto", exception)
+                        onTextRecognized("Errore nello scatto: ${exception.message}")
+                    }
+                })
+            }
+            setCaptureFunction(captureFunc)
+
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
                 val preview = Preview.Builder().build().also {
@@ -235,14 +261,33 @@ fun CameraPreview(
                         lifecycleOwner, cameraSelector, preview, imageCapture
                     )
                 } catch (exc: Exception) {
-                    Log.e("CameraPreview", "Collegamento dei casi d'uso fallito", exc)
+                    Log.e("CameraPreview", "Collegamento fallito", exc)
                 }
             }, executor)
+
             previewView
         },
         modifier = Modifier.fillMaxSize()
     )
 }
+
+/**
+ * Converte un ImageProxy (da CameraX) in un Bitmap, applicando la rotazione corretta.
+ */
+@androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+private fun imageProxyToBitmap(imageProxy: ImageProxy): Bitmap {
+    val image = imageProxy.image!!
+    val buffer = image.planes[0].buffer
+    val bytes = ByteArray(buffer.remaining())
+    buffer.get(bytes)
+    val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+
+    // Applica la rotazione per visualizzare l'immagine correttamente
+    val matrix = Matrix()
+    matrix.postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
+    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+}
+
 
 // Funzione helper per analizzare una singola immagine
 @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)

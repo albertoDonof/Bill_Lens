@@ -1,5 +1,6 @@
 package com.example.billlens.domain.scan
 
+import android.graphics.Bitmap
 import android.util.Log
 import androidx.activity.result.launch
 import androidx.lifecycle.ViewModel
@@ -19,7 +20,8 @@ import javax.inject.Inject
 data class ScanUiState(
     val hasCameraPermission: Boolean = false,
     val isAnalyzing: Boolean = false,
-    val recognizedText: String? = null
+    val recognizedText: String? = null,
+    val frozenBitmap: Bitmap? = null
 )
 
 // Evento di navigazione con il testo come payload
@@ -69,8 +71,16 @@ class ScanReceiptViewModel @Inject constructor() : ViewModel() {
      * Chiamato dalla UI quando l'utente preme il tasto di scatto.
      */
     fun onTakePhotoClick() {
-        _uiState.update { it.copy(isAnalyzing = true) }
+        //_uiState.update { it.copy(isAnalyzing = true) }
         captureFunc?.invoke()
+    }
+
+    fun onAnalysisStarted(bitmap: Bitmap?) {
+        _uiState.update { it.copy(isAnalyzing = true, frozenBitmap = bitmap) }
+    }
+
+    fun onNewScanRequested() {
+        _uiState.update { it.copy(isAnalyzing = false, frozenBitmap = null) }
     }
 
     /**
