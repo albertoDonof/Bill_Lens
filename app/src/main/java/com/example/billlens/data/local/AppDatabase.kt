@@ -7,11 +7,13 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.example.billlens.data.model.Expense
 import com.example.billlens.utils.Converters
+import com.example.billlens.data.model.UserEntity
 
-@Database(entities = [Expense::class], version = 2, exportSchema = false)
+@Database(entities = [Expense::class, UserEntity::class], version = 3, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase(){
     abstract fun expenseDao(): ExpenseDao
+    abstract fun userDao(): UserDao
 
     companion object {
         // La keyword 'volatile' assicura che il valore di INSTANCE sia sempre aggiornato

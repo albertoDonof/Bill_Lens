@@ -20,8 +20,10 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
 import com.example.billlens.domain.scan.ScanReceiptViewModel
 import com.example.billlens.ui.home.HomeScreen
+import com.example.billlens.ui.login.LoginScreen
 import com.example.billlens.ui.scan.ScanReceiptScreen
 import com.example.billlens.ui.scan.TextResultScreen
+import com.example.billlens.ui.settings.SettingsScreen
 
 // Placeholder per le altre schermate
 // Aggiorna le altre schermate per accettare il NavController
@@ -44,45 +46,53 @@ fun StatsScreen(navController: NavHostController) {
     }
 }
 
-
-// Aggiorna le altre schermate per accettare il NavController
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsScreen(navController: NavHostController) {
-    // Esempio di come anche questa schermata avrà il suo Scaffold
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Settings") }) },
-        bottomBar = { AppBottomNavigationBar(navController = navController) }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Contenuto della schermata Settings")
-        }
-    }
-}
-
 const val SCAN_GRAPH_ROUTE = "scan_graph"
 /**
  * Definisce il grafo di navigazione e associa ogni route a un Composable.
  */
 @Composable
-fun AppNavigation(navController: NavHostController) {
+fun AppNavigation(
+    navController: NavHostController,
+    startDestination: String
+) {
     NavHost(
         navController = navController,
-        startDestination = NavigationScreens.Home.route,
+        startDestination = startDestination,
     ) {
-        composable(NavigationScreens.Home.route) {
-            HomeScreen(navController = navController)
+        composable(NavigationScreens.Login.route) {
+                LoginScreen(
+                    onSignInSuccess = {
+                        // Dopo il login, vai alla home e pulisci lo stack
+                        navController.navigate(NavigationScreens.Home.route) {
+                            popUpTo(NavigationScreens.Login.route) {
+                                inclusive = true
+                            }
+                        }
+                    }
+                )
         }
-        composable(NavigationScreens.Stats.route) {
-            StatsScreen(navController = navController) // Sostituisci con la tua vera schermata
-        }
-        composable(NavigationScreens.Settings.route) {
-            SettingsScreen(navController = navController) // Sostituisci con la tua vera schermata
+
+        navigation(
+            startDestination = NavigationScreens.Home.route,
+            route = "main_graph"
+        ){
+            composable(NavigationScreens.Home.route) {
+                HomeScreen(navController = navController)
+            }
+            composable(NavigationScreens.Stats.route) {
+                StatsScreen(navController = navController) // Sostituisci con la tua vera schermata
+            }
+            composable(NavigationScreens.Settings.route) {
+                SettingsScreen(
+                    navController = navController,
+                    onLogout = {
+                        // Naviga al Login e cancella tutto lo stack precedente
+                        navController.navigate(NavigationScreens.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
+            }
         }
 
         navigation(
@@ -110,8 +120,14 @@ fun AppNavigation(navController: NavHostController) {
                 val scanViewModel = hiltViewModel<ScanReceiptViewModel>(parentEntry)
 
                 TextResultScreen(
-                    viewModel = scanViewModel,
-                    onNavigateBack = { navController.popBackStack() }
+                    scanViewModel = scanViewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    onSaveSuccess = {
+                        // Torna alla Home e rimuove tutto il flusso di scansione dalla cronologia
+                        navController.navigate(NavigationScreens.Home.route) {
+                            popUpTo(SCAN_GRAPH_ROUTE) { inclusive = true }
+                        }
+                    }
                 )
             }
         }

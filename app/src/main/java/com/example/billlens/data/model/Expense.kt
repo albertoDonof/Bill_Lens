@@ -15,6 +15,7 @@ data class Expense(
     val receiptDate: Date,
     val category: String,
     val notes: String?,
+    val storeLocation: String?,
     // Verrà impostato un valore di default al momento della creazione dell'oggetto
     val insertionDate: Date,
     // Campi per la sincronizzazione

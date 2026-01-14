@@ -41,4 +41,7 @@ interface ExpenseDao {
     // Ottiene tutti gli elementi non sincronizzati per inviarli al server
     @Query("SELECT * FROM expenses WHERE isSynced = 0")
     suspend fun getUnsyncedExpenses(): List<Expense>
+
+    @Query("DELETE FROM expenses")
+    suspend fun deleteAllExpenses()
 }

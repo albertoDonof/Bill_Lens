@@ -19,7 +19,10 @@ import javax.inject.Singleton
 object NetworkModule {
 
     // L'IP 10.0.2.2 è l'alias per il localhost del tuo PC dall'emulatore Android
-    private const val BASE_URL = "http://10.0.2.2:5000/"
+    //private const val BASE_URL = "http://10.0.2.2:5000/"
+    //Per il telefono fisico:
+    private const val BASE_URL = "http://10.154.75.78:5000/"
+
 
     @Provides
     @Singleton

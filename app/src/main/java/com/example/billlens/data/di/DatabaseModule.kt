@@ -4,6 +4,8 @@ import android.content.Context
 import com.example.billlens.data.local.AppDatabase
 import com.example.billlens.data.local.ExpenseDao
 import com.example.billlens.data.local.LocalDataSource
+import com.example.billlens.data.local.UserDao
+import com.example.billlens.data.local.UserLocalDataSource
 import com.example.billlens.data.repository.ExpenseRepository
 import com.example.billlens.data.repository.ExpenseRepositoryImpl
 import dagger.Binds
@@ -47,7 +49,19 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideUserDao(database: AppDatabase): UserDao {
+        return database.userDao()
+    }
+
+    @Provides
+    @Singleton
     fun provideLocalDataSource(expenseDao: ExpenseDao): LocalDataSource {
         return LocalDataSource(expenseDao)
+    }
+
+    @Provides
+    @Singleton
+    fun provideUserLocalDataSource(userDao: UserDao): UserLocalDataSource {
+        return UserLocalDataSource(userDao)
     }
 }

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.activity.result.launch
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.billlens.ui.scan.ReceiptDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,8 +21,8 @@ import javax.inject.Inject
 data class ScanUiState(
     val hasCameraPermission: Boolean = false,
     val isAnalyzing: Boolean = false,
-    val recognizedText: String? = null,
-    val frozenBitmap: Bitmap? = null
+    val frozenBitmap: Bitmap? = null,
+    val extractedDetails: ReceiptDetails? = null
 )
 
 // Evento di navigazione con il testo come payload
@@ -50,7 +51,7 @@ class ScanReceiptViewModel @Inject constructor() : ViewModel() {
     fun onPermissionResult(isGranted: Boolean) {
         _uiState.update { it.copy(hasCameraPermission = isGranted) }
         if (!isGranted) {
-            Log.w("ScanViewModel", "Permesso fotocamera non concesso dall'utente.")
+            Log.w("ScanViewModel", "Camera permission not granted by user.")
         }
     }
 
@@ -59,7 +60,7 @@ class ScanReceiptViewModel @Inject constructor() : ViewModel() {
      */
     fun onTextRecognized(text: String) {
         // Ferma il loader
-        _uiState.update { it.copy(isAnalyzing = false, recognizedText = text) }
+        _uiState.update { it.copy(isAnalyzing = false)}
 
         // Invia l'evento di navigazione con il testo riconosciuto
         viewModelScope.launch {
@@ -79,8 +80,19 @@ class ScanReceiptViewModel @Inject constructor() : ViewModel() {
         _uiState.update { it.copy(isAnalyzing = true, frozenBitmap = bitmap) }
     }
 
+    // Modifica questa funzione per accettare l'oggetto strutturato
+    fun onAnalysisCompleted(details: ReceiptDetails) {
+        _uiState.update { it.copy(
+            isAnalyzing = false,
+            extractedDetails = details
+        ) }
+        viewModelScope.launch {
+            _navigationEvent.send(ScanNavigationEvent.NavigateToTextResult)
+        }
+    }
+
     fun onNewScanRequested() {
-        _uiState.update { it.copy(isAnalyzing = false, frozenBitmap = null) }
+        _uiState.update { it.copy(isAnalyzing = false, frozenBitmap = null, extractedDetails = null) }
     }
 
     /**
@@ -91,6 +103,6 @@ class ScanReceiptViewModel @Inject constructor() : ViewModel() {
     }
 
     fun clearRecognizedText() {
-        _uiState.update { it.copy(recognizedText = null) }
+        _uiState.update { it.copy(extractedDetails = null) }
     }
 }

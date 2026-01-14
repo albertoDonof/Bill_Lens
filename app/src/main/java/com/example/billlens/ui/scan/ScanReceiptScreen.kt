@@ -76,6 +76,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 
 
+data class ReceiptDetails(
+    val storeName: String? = null,
+    val storeLocation: String? = null,
+    val date: String? = null,
+    val total: String? = null,
+    val fullText: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanReceiptScreen(
@@ -122,10 +130,10 @@ fun ScanReceiptScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Scansiona Scontrino") },
+                title = { Text("Scan Receipt") },
                 navigationIcon = {
                     IconButton(onClick = {navController.popBackStack()}) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -159,7 +167,9 @@ fun ScanReceiptScreen(
                         )
                     } else {
                         CameraPreview(
-                            onTextRecognized = viewModel::onTextRecognized,
+                            onTextRecognized = { details ->
+                                viewModel.onAnalysisCompleted(details)
+                            },
                             setCaptureFunction = viewModel::setCaptureFunction,
                             onAnalysisStarted = viewModel::onAnalysisStarted
                         )
@@ -178,15 +188,15 @@ fun ScanReceiptScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Call,
-                        contentDescription = "Scatta Foto",
+                        contentDescription = "Take Photo",
                         modifier = Modifier.size(ButtonDefaults.IconSize)
                     )
                     Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                    Text("Scatta Foto")
+                    Text("Take Photo")
                     }
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Permesso fotocamera non concesso.")
+                    Text("Camera permission not granted.")
                 }
             }
         }
@@ -207,7 +217,7 @@ fun ScanReceiptScreen(
 
 @Composable
 fun CameraPreview(
-    onTextRecognized: (String) -> Unit,
+    onTextRecognized: (ReceiptDetails) -> Unit,
     setCaptureFunction: (() -> Unit) -> Unit,
     onAnalysisStarted: (Bitmap?) -> Unit
 ) {
@@ -243,7 +253,7 @@ fun CameraPreview(
 
                     override fun onError(exception: ImageCaptureException) {
                         Log.e("CameraPreview", "Errore nello scatto", exception)
-                        onTextRecognized("Errore nello scatto: ${exception.message}")
+                        onTextRecognized(ReceiptDetails(fullText = "Error in shooting photo: ${exception.message}"))
                     }
                 })
             }
@@ -261,7 +271,7 @@ fun CameraPreview(
                         lifecycleOwner, cameraSelector, preview, imageCapture
                     )
                 } catch (exc: Exception) {
-                    Log.e("CameraPreview", "Collegamento fallito", exc)
+                    Log.e("CameraPreview", "Binding failed", exc)
                 }
             }, executor)
 
@@ -291,7 +301,7 @@ private fun imageProxyToBitmap(imageProxy: ImageProxy): Bitmap {
 
 // Funzione helper per analizzare una singola immagine
 @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
-private fun analyzeImage(imageProxy: ImageProxy, onTextRecognized: (String) -> Unit) {
+private fun analyzeImage(imageProxy: ImageProxy, onTextRecognized: (ReceiptDetails) -> Unit) {
     val mediaImage = imageProxy.image
     if (mediaImage != null) {
         val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
@@ -303,21 +313,21 @@ private fun analyzeImage(imageProxy: ImageProxy, onTextRecognized: (String) -> U
                 val organizedText = reorganizeTextByRow(visionText)
 
                 // 2. Estrai i dettagli specifici
-                val detailsString = extractReceiptDetails(organizedText)
+                val details = extractReceiptDetails(organizedText)
 
                 // 4. Passa alla UI il testo completo e riorganizzato
-                onTextRecognized(detailsString)
+                onTextRecognized(details)
             }
             .addOnFailureListener { e ->
                 Log.e("TextAnalyzer", "Riconoscimento testo fallito", e)
-                onTextRecognized("Analisi fallita: ${e.message}")
+                onTextRecognized(ReceiptDetails(fullText = "Failed Analyses: ${e.message}"))
             }
             .addOnCompleteListener {
                 imageProxy.close()
             }
     } else {
         imageProxy.close() // Assicurati di chiudere il proxy anche in caso di errore
-        onTextRecognized("Errore: Impossibile leggere l'immagine.")
+        onTextRecognized(ReceiptDetails(fullText ="Error: cannot read image."))
     }
 }
 
@@ -366,10 +376,18 @@ private fun reorganizeTextByRow(visionText: Text): List<String> {
  * @param organizedLines Il testo dello scontrino già organizzato per righe.
  * @return Un oggetto ReceiptDetails con le informazioni trovate.
  */
-private fun extractReceiptDetails(organizedLines: List<String>): String {
+private fun extractReceiptDetails(organizedLines: List<String>): ReceiptDetails {
     var storeName: String? = null
     var date: String? = null
     var total: String? = null
+    var storeLocation: String? = null
+
+    // Eristica per l'indirizzo: cerca righe che iniziano con parole chiave stradali
+    val addressKeywords = listOf("via", "viale", "piazza", "corso", "strada", "stda", "p.zza")
+
+    storeLocation = organizedLines.firstOrNull { line ->
+        addressKeywords.any { it -> line.lowercase().contains(it) }
+    }
 
     // --- 1. Estrazione Nome Negozio (Logica con rimozione suffissi) ---
     // Lista di suffissi societari comuni da rimuovere.
@@ -456,5 +474,13 @@ private fun extractReceiptDetails(organizedLines: List<String>): String {
 
     // Costruisce la stringa di risultato come richiesto
     val fullText = organizedLines.joinToString("\n")
-    return "--- Dettagli Estratti ---\nNegozio: ${storeName ?: "Non trovato"}\nData: ${date ?: "Non trovata"}\nTotale: ${total ?: "Non trovato"}\n\n--- Testo Completo ---\n$fullText"
+    // return "--- Dettagli Estratti ---\nNegozio: ${storeName ?: "Non trovato"}\nIndirizzo: ${storeLocation ?: "Non trovato"}\nData: ${date ?: "Non trovata"}\nTotale: ${total ?: "Non trovato"}\n\n--- Testo Completo ---\n$fullText"
+
+    return ReceiptDetails(
+        storeName = storeName,
+        storeLocation = storeLocation,
+        date = date,
+        total = total,
+        fullText = fullText
+    )
 }

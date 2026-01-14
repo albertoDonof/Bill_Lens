@@ -3,11 +3,15 @@ package com.example.billlens.data.di
 import com.example.billlens.data.repository.UserRepository
 import com.example.billlens.data.repository.UserRepositoryImpl
 import com.example.billlens.data.user.FakeUserDataSource
+import com.example.billlens.data.user.FirebaseAuthDataSource
 import com.example.billlens.data.user.UserDataSource
+import com.google.firebase.auth.FirebaseAuth
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import retrofit2.Retrofit
 import javax.inject.Singleton
 
 @Module
@@ -19,9 +23,11 @@ abstract class UserModule {
     @Singleton
     abstract fun bindUserRepository(impl: UserRepositoryImpl): UserRepository
 
-    // Dice a Hilt: quando qualcuno chiede un UserDataSource, fornisci FakeUserDataSource
-    // ATTENZIONE: Quando avrai una vera UserDataSource, cambierai solo questa riga!
-    @Binds
-    @Singleton
-    abstract fun bindUserDataSource(impl: FakeUserDataSource): UserDataSource
+//    // Dice a Hilt: quando qualcuno chiede un UserDataSource, fornisci FakeUserDataSource
+//    // ATTENZIONE: Quando avrai una vera UserDataSource, cambierai solo questa riga!
+//    @Binds
+//    @Singleton
+//    abstract fun bindUserDataSource(impl: FirebaseAuthDataSource): UserDataSource
+
+
 }

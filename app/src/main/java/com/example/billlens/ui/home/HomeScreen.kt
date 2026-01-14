@@ -47,36 +47,6 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // Per ora usiamo dati placeholder, che verranno sostituiti con i dati di uiState
-    val placeholderExpenses = listOf(
-        Expense(
-            id = "1",
-            totalAmount = BigDecimal(7.50),
-            receiptDate = Date(),
-            category = "Cibo",
-            notes = "Caffè e cornetto",
-            insertionDate = Date(),
-            lastUpdated = Date()
-        ),
-        Expense(
-            id = "2",
-            totalAmount = BigDecimal(45),
-            receiptDate = Date(System.currentTimeMillis() - 86400000),
-            category = "Trasporti",
-            notes = "Biglietto treno",
-            insertionDate = Date(),
-            lastUpdated = Date()
-        ),
-        Expense(
-            id = "3",
-            totalAmount = BigDecimal(120.80),
-            receiptDate = Date(System.currentTimeMillis() - 172800000),
-            category = "Shopping",
-            notes = "Nuove scarpe",
-            insertionDate = Date(),
-            lastUpdated = Date()
-        )
-    )
 
     Scaffold(
         topBar = {
@@ -84,8 +54,9 @@ fun HomeScreen(
                 title = {
                     // L'UserHeader ora può far parte della TopAppBar
                     UserHeader(
-                        userName = uiState.userName ?: "Utente",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        userName = uiState.userName ?: "User",
+                        profilePictureUrl = uiState.userProfilePictureUrl
+
                     )
                 }
             )
@@ -98,7 +69,7 @@ fun HomeScreen(
             FloatingActionButton(
                 onClick = { navController.navigate(SCAN_GRAPH_ROUTE) }
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Scansiona Scontrino")
+                Icon(Icons.Default.Add, contentDescription = "Scan receipt")
             }
         }
     ) { innerPadding ->
@@ -113,14 +84,14 @@ fun HomeScreen(
             }
             uiState.initialLoadError != null -> {
                 Box(modifier = contentModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = "Errore: ${uiState.initialLoadError}")
+                    Text(text = "Error: ${uiState.initialLoadError}")
                 }
             }
             else -> {
                 // Passiamo il modifier con il padding al contenuto
                 HomeScreenContent(
                     monthlyTotal = uiState.monthlyTotal,
-                    recentExpenses = uiState.recentExpenses.ifEmpty({ placeholderExpenses }),
+                    recentExpenses = uiState.recentExpenses,
                     modifier = contentModifier
                 )
             }
@@ -151,7 +122,7 @@ fun HomeScreenContent(
 
         // 2. Titolo della lista
         Text(
-            text = "Attività Recenti",
+            text = "Recent Activity",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -167,7 +138,7 @@ fun HomeScreenContent(
                     .padding(top = 40.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Nessuna spesa recente. Aggiungine una!")
+                Text("No recent expenses. Add one!")
             }
         } else {
             ExpensesFeed(
@@ -189,6 +160,7 @@ fun HomeScreenContentPreview() {
             receiptDate = Date(),
             category = "Cibo",
             notes = "Pranzo veloce",
+            storeLocation = "Ristorante Da Mario",
             insertionDate = Date(),
             lastUpdated = Date()
         ),
@@ -198,6 +170,7 @@ fun HomeScreenContentPreview() {
             receiptDate = Date(System.currentTimeMillis() - 86400000 * 2), // Due giorni fa
             category = "Shopping",
             notes = "Maglietta nuova",
+            storeLocation = "Negozio Centro",
             insertionDate = Date(),
             lastUpdated = Date()
         ),
@@ -207,6 +180,7 @@ fun HomeScreenContentPreview() {
             receiptDate = Date(System.currentTimeMillis() - 86400000 * 3), // Tre giorni fa
             category = "Trasporti",
             notes = "Biglietto autobus",
+            storeLocation = "Edicola Stazione",
             insertionDate = Date(),
             lastUpdated = Date()
         )

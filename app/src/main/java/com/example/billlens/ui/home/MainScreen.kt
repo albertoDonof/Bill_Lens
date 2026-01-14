@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.example.billlens.ui.navigation.AppBottomNavigationBar
 import com.example.billlens.ui.navigation.AppNavigation
+import com.example.billlens.ui.navigation.NavigationScreens
 
 
 /**
@@ -19,6 +20,7 @@ fun MainScreen() {
 
 
     AppNavigation(
-        navController = navController
+        navController = navController,
+        startDestination = NavigationScreens.Home.route
     )
 }

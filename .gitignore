@@ -13,6 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+/.idea/copilot.data.*
 
 # Log/OS Files
 *.log

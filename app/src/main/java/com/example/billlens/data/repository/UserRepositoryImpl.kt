@@ -1,7 +1,11 @@
 package com.example.billlens.data.repository
 
+import com.example.billlens.data.local.UserLocalDataSource
 import com.example.billlens.data.model.UserData
+import com.example.billlens.data.user.FirebaseAuthDataSource
 import com.example.billlens.data.user.UserDataSource
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,15 +16,29 @@ import javax.inject.Singleton
  */
 @Singleton
 class UserRepositoryImpl @Inject constructor(
-    private val userDataSource: UserDataSource
+    private val firebaseAuthDataSource: FirebaseAuthDataSource,
+    private val userLocalDataSource: UserLocalDataSource
 ) : UserRepository {
 
-    override val userData: Flow<UserData?> = userDataSource.userData
+    override val userData: Flow<UserData?> = firebaseAuthDataSource.observeUser()
 
-    // In futuro, qui avrai la logica per il sign-in, sign-out, ecc.
-    // Esempio:
-    // suspend fun signInWithGoogle(token: String) {
-    //     val user = userDataSource.signInWithGoogle(token)
-    //     // Puoi salvare i dati utente in un database locale qui se necessario
-    // }
+
+    override fun signOut() = firebaseAuthDataSource.signOut()
+
+    // AGGIUNGI QUESTA IMPLEMENTAZIONE
+    override suspend fun getIdToken(forceRefresh: Boolean): String? {
+        return firebaseAuthDataSource.getIdToken(forceRefresh)
+    }
+
+    override suspend fun clearLocalUser() {
+        userLocalDataSource.clear()
+
+    }
+
+    override fun getAuthorizationRequest(): AuthorizationRequest {
+        // Delega la creazione della richiesta al data source che sa come farlo.
+        return firebaseAuthDataSource.getAuthorizationRequest()
+    }
+
+
 }

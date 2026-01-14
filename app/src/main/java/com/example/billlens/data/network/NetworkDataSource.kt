@@ -7,6 +7,12 @@ import javax.inject.Inject
 class NetworkDataSource @Inject constructor(
     private val apiService: BillLensApiService
 ) {
-    suspend fun syncExpenses(lastTimestamp: String?) = apiService.syncExpenses(lastTimestamp)
-    suspend fun upsertExpense(expense: Expense) = apiService.upsertExpense(expense)
+    suspend fun syncExpenses(token: String,lastTimestamp: String?) = apiService.syncExpenses("Bearer $token",lastTimestamp)
+    suspend fun upsertExpense(token: String, expense: Expense) = apiService.upsertExpense("Bearer $token",expense)
+
+    suspend fun exportToSheets(firebaseIdToken: String, googleAccessToken: String) =
+        apiService.exportToSheets(
+            token = "Bearer $firebaseIdToken",
+            body = ExportSheetRequest(accessToken = googleAccessToken)
+        )
 }

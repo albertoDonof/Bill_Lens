@@ -30,6 +30,8 @@ interface ExpenseRepository {
      */
     suspend fun deleteExpense(expense: Expense)
 
+    suspend fun clearLocalData()
+
     /**
      * Orchestra la sincronizzazione dei dati con il server.
      * Invia le modifiche locali (upsert/delete) e riceve gli aggiornamenti

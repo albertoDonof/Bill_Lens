@@ -21,4 +21,6 @@ class LocalDataSource @Inject constructor(private val expenseDao: ExpenseDao){
     suspend fun getLatestUpdateTimestamp(): Date? = expenseDao.getLatestUpdateTimestamp()
 
     suspend fun getUnsyncedExpenses(): List<Expense> = expenseDao.getUnsyncedExpenses()
+
+    suspend fun deleteAllExpenses() = expenseDao.deleteAllExpenses()
 }

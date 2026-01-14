@@ -44,7 +44,7 @@ fun ExpensesListScreen(
 
         uiState.initialLoadError != null -> {
             Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "Errore: ${uiState.initialLoadError}")
+                Text(text = "Error: ${uiState.initialLoadError}")
             }
         }
 
@@ -79,7 +79,7 @@ fun ExpensesListScreenContent(
                     .padding(),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Nessuna spesa trovata.")
+                Text("No expense found.")
             }
         } else {
             ExpensesFeed(
@@ -99,6 +99,7 @@ fun ExpensesListScreenContentPreview() {
             totalAmount = BigDecimal("12.50"),
             receiptDate = Date(),
             category = "Cibo",
+            storeLocation = "Ristorante Da Mario",
             notes = "Pranzo",
             insertionDate = Date(),
             lastUpdated = Date()
@@ -108,6 +109,7 @@ fun ExpensesListScreenContentPreview() {
             totalAmount = BigDecimal("85.00"),
             receiptDate = Date(),
             category = "Shopping",
+            storeLocation = "Centro Commerciale",
             notes = "Maglietta nuova",
             insertionDate = Date(),
             lastUpdated = Date()

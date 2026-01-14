@@ -11,9 +11,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.compose.rememberNavController
 import com.example.billlens.ui.home.HomeScreen
 import com.example.billlens.ui.home.MainScreen
+import com.example.billlens.ui.navigation.AppNavigation
+import com.example.billlens.ui.navigation.NavigationScreens
 import com.example.billlens.ui.theme.BillLensTheme
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -23,7 +28,18 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             BillLensTheme {
-                MainScreen()
+                // Determina la route di partenza
+                val startDestination = if (Firebase.auth.currentUser != null) {
+                    "main_graph" // Utente già loggato
+                } else {
+                    NavigationScreens.Login.route // Utente non loggato
+                }
+
+                val navController = rememberNavController()
+                AppNavigation(
+                    navController = navController,
+                    startDestination = startDestination
+                )
             }
         }
     }
