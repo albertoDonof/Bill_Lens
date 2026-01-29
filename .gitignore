@@ -14,6 +14,7 @@
 .cxx
 local.properties
 /.idea/copilot.data.*
+apikeys.properties
 
 # Log/OS Files
 *.log

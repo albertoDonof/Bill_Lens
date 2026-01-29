@@ -74,6 +74,8 @@ import android.graphics.Matrix
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.billlens.R
 
 
 data class ReceiptDetails(
@@ -187,7 +189,7 @@ fun ScanReceiptScreen(
                         .height(56.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Call,
+                        painter = painterResource(id = R.drawable.outline_photo_camera_24) ,
                         contentDescription = "Take Photo",
                         modifier = Modifier.size(ButtonDefaults.IconSize)
                     )
@@ -319,7 +321,7 @@ private fun analyzeImage(imageProxy: ImageProxy, onTextRecognized: (ReceiptDetai
                 onTextRecognized(details)
             }
             .addOnFailureListener { e ->
-                Log.e("TextAnalyzer", "Riconoscimento testo fallito", e)
+                Log.e("TextAnalyzer", "Failed text recognition.", e)
                 onTextRecognized(ReceiptDetails(fullText = "Failed Analyses: ${e.message}"))
             }
             .addOnCompleteListener {

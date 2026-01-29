@@ -35,10 +35,12 @@ import com.google.android.gms.auth.api.identity.AuthorizationClient
 import androidx.activity.result.IntentSenderRequest
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import com.google.android.gms.auth.api.identity.Identity
+import com.example.billlens.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +52,8 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val lastSyncTime by viewModel.lastSyncRelativeTime.collectAsStateWithLifecycle()
+
 
     var showSignOutDialog by remember { mutableStateOf(false) }
 
@@ -94,11 +98,17 @@ fun SettingsScreen(
     // Gestione Snackbar per feedback
     LaunchedEffect(uiState.successMessage, uiState.errorMessage) {
         uiState.successMessage?.let {
-            snackbarHostState.showSnackbar(it, actionLabel = if (uiState.lastExportUrl != null) "VIEW" else null)
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
             viewModel.clearMessages()
         }
         uiState.errorMessage?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
             viewModel.clearMessages()
         }
     }
@@ -167,14 +177,15 @@ fun SettingsScreen(
             item {
                 SectionHeader("Data Management")
                 SettingsRow(
-                    icon = Icons.Default.Build,
+                    drawableVector = R.drawable.outline_cloud_sync_24,
                     title = "Sync Data",
-                    subtitle = "Last sync: Just now",
+                    subtitle = if (uiState.isSyncing) "Syncing..." else "Last sync: $lastSyncTime",
+                    enabled = !uiState.isSyncing,
                     onClick = { viewModel.triggerSync() }
                 )
                 // IL NUOVO TASTO GOOGLE SHEETS
                 SettingsRow(
-                    icon = Icons.Default.Share, // Icona tabella
+                    drawableVector = R.drawable.outline_file_export_24,
                     title = "Export to Google Sheets",
                     subtitle = if (uiState.isExporting) "Processing..." else "Create a spreadsheet in your Drive",
                     onClick = {
@@ -187,7 +198,7 @@ fun SettingsScreen(
 
                 if (uiState.lastExportUrl != null) {
                     SettingsRow(
-                        icon = Icons.Default.AddCircle,
+                        drawableVector = R.drawable.outline_dataset_linked_24,
                         title = "Open Last Export",
                         subtitle = "View the spreadsheet in your browser",
                         onClick = {
@@ -285,19 +296,20 @@ fun ProfileCard(name: String, email: String, profilePic: String?) {
 
 @Composable
 fun SettingsRow(
-    icon: ImageVector,
+    drawableVector: Int,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    trailingContent: @Composable (() -> Unit)?= null
+    trailingContent: @Composable (() -> Unit)?= null,
+    enabled: Boolean = true
 ) {
     ListItem(
-        modifier = Modifier.clickable { onClick() },
+        modifier = Modifier.clickable(enabled = enabled) { onClick() },
         headlineContent = { Text(title) },
         supportingContent = { Text(subtitle) },
         leadingContent = {
             Icon(
-                icon,
+                painter = painterResource(id = drawableVector),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
             )

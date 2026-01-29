@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import com.example.billlens.data.model.Expense
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.* // Esempio
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -30,6 +32,8 @@ import com.example.billlens.utils.CurrencyFormatter
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.*
+import com.example.billlens.R
+import com.example.billlens.domain.expenses.ExpenseCategory
 
 /**
  * Un Composable riutilizzabile che mostra una singola voce di spesa.
@@ -43,16 +47,28 @@ import java.util.*
  */
 @Composable
 fun ExpenseItem(
-    category: String,
-    notes: String?,
-    amount: BigDecimal,
-    date: Date,
-    icon: ImageVector,
+    expense: Expense,
+    onItemClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Determina l'icona corretta basandosi sul `displayName` della categoria
+    val iconResId = when (expense.category) {
+        ExpenseCategory.GROCERIES.displayName -> R.drawable.outline_shopping_cart_24
+        ExpenseCategory.DINING.displayName -> R.drawable.outline_restaurant_24
+        ExpenseCategory.TRANSPORT.displayName -> R.drawable.outline_transportation_24
+        ExpenseCategory.SHOPPING.displayName -> R.drawable.outline_shopping_bag_24
+        ExpenseCategory.HEALTH.displayName -> R.drawable.baseline_health_and_safety_24
+        ExpenseCategory.HOME.displayName -> R.drawable.outline_garage_home_24
+        ExpenseCategory.ENTERTAINMENT.displayName -> R.drawable.outline_books_movies_and_music_24
+        ExpenseCategory.PERSONAL_CARE.displayName -> R.drawable.outline_self_care_24
+        ExpenseCategory.EDUCATION.displayName -> R.drawable.baseline_school_24
+        else -> R.drawable.outline_category_24 // Icona di default per "Miscellaneous" o categorie sconosciute
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .clickable{ onItemClick(expense.id) }
             .padding(vertical = 12.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -65,8 +81,8 @@ fun ExpenseItem(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = icon,
-                contentDescription = category,
+                painter = painterResource(id = iconResId),
+                contentDescription = expense.category,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -75,15 +91,15 @@ fun ExpenseItem(
 
         // Dettagli della spesa (Categoria e Note)
         Column(modifier = Modifier.weight(1f)) {
-            if (!notes.isNullOrBlank()) {
+            if (!expense.notes.isNullOrBlank()) {
                 Text(
-                    text = notes,
+                    text = expense.notes,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold
                 )
             }
                 Text(
-                    text = category,
+                    text = expense.category,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
@@ -94,13 +110,13 @@ fun ExpenseItem(
         // Importo e Data
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = "-${CurrencyFormatter.formatBigToString(amount)}",
+                text = CurrencyFormatter.formatBigToString(expense.totalAmount),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error
             )
             Text(
-                text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(date),
+                text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expense.receiptDate),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
@@ -111,14 +127,19 @@ fun ExpenseItem(
 @Preview(showBackground = true)
 @Composable
 fun ExpenseItemPreview() {
-    ExpenseItem(
-        category = "Cibo",
-        notes = "Pranzo con colleghi",
-        amount = BigDecimal(25.50),
-        date = Date(),
-        icon = Icons.Rounded.AccountCircle
+    val sampleExpense = Expense(
+        notes = "Weekly Groceries",
+        category = ExpenseCategory.GROCERIES.displayName, // Usa l'enum per la preview
+        totalAmount = BigDecimal("55.20"),
+        receiptDate = Date(),
+        // Altri campi non necessari per la preview di questo componente
+        storeLocation = "Supermarket",
+        insertionDate = Date(),
+        lastUpdated = Date()
     )
+    ExpenseItem(expense = sampleExpense, onItemClick = {})
 }
+
 
 
 /**
@@ -130,34 +151,20 @@ fun ExpenseItemPreview() {
 @Composable
 fun ExpensesFeed(
     expenses: List<Expense>,
+    onExpenseClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        contentPadding = PaddingValues(bottom = 80.dp) // Aggiunto padding in basso
     ) {
         items(expenses, key = { it.id }) { expense ->
+            // Ora basta passare l'oggetto expense
             ExpenseItem(
-                category = expense.category,
-                notes = expense.notes,
-                amount = expense.totalAmount,
-                date = expense.receiptDate,
-                icon = getIconForCategory(expense.category) // Funzione helper per l'icona
-            )
+                expense = expense,
+                onItemClick = onExpenseClick
+                )
             HorizontalDivider()
         }
-    }
-}
-
-// Funzione helper per mappare una categoria a un'icona
-private fun getIconForCategory(category: String): ImageVector {
-    return when (category.lowercase()) {
-        "cibo", "food" -> Icons.Default.AccountBox
-        "trasporti", "transport" -> Icons.Default.AccountBox
-        "shopping" -> Icons.Default.ShoppingCart
-        "casa", "home" -> Icons.Default.Home
-        "svago", "entertainment" -> Icons.Default.AccountBox
-        else -> Icons.Default.AccountBox
     }
 }

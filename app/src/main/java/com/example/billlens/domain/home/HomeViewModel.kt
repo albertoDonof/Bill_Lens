@@ -1,8 +1,10 @@
 package com.example.billlens.domain.home
 
 import android.icu.util.Calendar
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.billlens.data.local.PreferenceDataSource
 import com.example.billlens.data.model.Expense
 import com.example.billlens.data.repository.ExpenseRepository
 import com.example.billlens.data.repository.UserRepository
@@ -34,11 +36,12 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val expenseRepository: ExpenseRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val preferenceDataSource: PreferenceDataSource
 ) : ViewModel() {
     // Flussi privati per gestire stati specifici e interni.
     private val _userMessage: MutableStateFlow<String?> = MutableStateFlow(null)
-    private val _isSyncing = MutableStateFlow(false)
+    // private val _isSyncing = MutableStateFlow(false)
 
     // Flusso che riceve le spese dal repository e le wrappa in una classe Async.
     private val _expensesAsync: Flow<Async<List<Expense>>> =
@@ -53,7 +56,7 @@ class HomeViewModel @Inject constructor(
      * È il risultato della combinazione di tutti gli altri flussi.
      */
     val uiState: StateFlow<HomeUiState> = combine(
-        _isSyncing, _userMessage, _expensesAsync, _userDataStream
+        preferenceDataSource.isSyncing, _userMessage, _expensesAsync, _userDataStream
     ) { isSyncing, userMessage, expensesAsync , userData->
         when (expensesAsync) {
             Async.Loading -> {
@@ -70,7 +73,7 @@ class HomeViewModel @Inject constructor(
                 HomeUiState(
                     userName = userData?.displayName,
                     userProfilePictureUrl = userData?.profilePictureUrl,
-                    recentExpenses = expensesData,
+                    recentExpenses = expensesData.take(30),
                     monthlyTotal = monthlyTotal,
                     isSyncing = isSyncing,
                     userMessage = userMessage
@@ -85,8 +88,17 @@ class HomeViewModel @Inject constructor(
         )
 
     init {
-        // Avvia la prima sincronizzazione all'avvio del ViewModel.
-        syncData(isManualRefresh = false)
+        // Avvia la prima sincronizzazione silenzionsa all'avvio del ViewModel.
+        viewModelScope.launch {
+            try {
+                // Chiama direttamente il repository
+                expenseRepository.syncWithServer()
+                Log.d("HomeViewModel", "Initial background sync completed.")
+            } catch (e: Exception) {
+                    // L'utente vedrà i dati locali e non verrà disturbato da un messaggio di errore.
+                    Log.e("HomeViewModel", "Initial background sync failed: ${e.message}")
+                }
+            }
     }
 
 
@@ -106,24 +118,17 @@ class HomeViewModel @Inject constructor(
      * @param isManualRefresh Indica se la sync è stata avviata dall'utente (es. pull-to-refresh).
      */
     fun syncData(isManualRefresh: Boolean = true) {
-        // Mostra il loader solo se l'utente ha avviato l'azione manualmente.
-        if (isManualRefresh) {
-            _isSyncing.value = true
+        // 1. Controlla lo stato globale per evitare sync multiple.
+        if (preferenceDataSource.isSyncing.value) {
+            Log.d("HomeViewModel", "Sync already in progress, skipping manual trigger.")
+            return
         }
-
         viewModelScope.launch {
             try {
                 expenseRepository.syncWithServer()
-                if (isManualRefresh) {
-                    showSnackbarMessage("Dati sincronizzati con successo")
-                }
+                showSnackbarMessage("Data synced successfully")
             } catch (e: Exception) {
-                showSnackbarMessage("Sincronizzazione fallita")
-            } finally {
-                // Nascondi sempre il loader al termine.
-                if (isManualRefresh) {
-                    _isSyncing.value = false
-                }
+                showSnackbarMessage("Sync failed. Check your connection.")
             }
         }
     }

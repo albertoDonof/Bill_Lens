@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.example.billlens.data.model.Expense
 import com.example.billlens.domain.home.HomeViewModel
 import com.example.billlens.ui.components.ExpensesFeed
@@ -90,6 +91,7 @@ fun HomeScreen(
             else -> {
                 // Passiamo il modifier con il padding al contenuto
                 HomeScreenContent(
+                    navController = navController,
                     monthlyTotal = uiState.monthlyTotal,
                     recentExpenses = uiState.recentExpenses,
                     modifier = contentModifier
@@ -103,6 +105,7 @@ fun HomeScreen(
 
 @Composable
 fun HomeScreenContent(
+    navController: NavController,
     monthlyTotal: BigDecimal,
     recentExpenses: List<Expense>,
     modifier: Modifier = Modifier
@@ -122,7 +125,7 @@ fun HomeScreenContent(
 
         // 2. Titolo della lista
         Text(
-            text = "Recent Activity",
+            text = "Recent Expenses",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -143,6 +146,9 @@ fun HomeScreenContent(
         } else {
             ExpensesFeed(
                 expenses = recentExpenses,
+                onExpenseClick = { expenseId ->// Naviga al dettaglio passando l'ID
+                    navController.navigate("expense_detail/$expenseId")
+                },
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -191,6 +197,7 @@ fun HomeScreenContentPreview() {
     // Sostituisci con il nome del tuo tema se è diverso.
     MaterialTheme {
         HomeScreenContent(
+            navController = rememberNavController(),
             monthlyTotal = BigDecimal("255.75"),
             recentExpenses = previewExpenses
         )

@@ -2,6 +2,7 @@ package com.example.billlens.data.repository
 
 import android.util.Log
 import com.example.billlens.data.local.LocalDataSource
+import com.example.billlens.data.local.PreferenceDataSource
 import com.example.billlens.data.model.Expense
 import com.example.billlens.data.network.NetworkDataSource
 import kotlinx.coroutines.flow.Flow
@@ -23,7 +24,8 @@ import javax.inject.Singleton
 class ExpenseRepositoryImpl @Inject constructor(
     private val localDataSource: LocalDataSource,
     private val networkDataSource: NetworkDataSource,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val preferenceDataSource: PreferenceDataSource
 ) : ExpenseRepository {
 
     // La UI osserva SOLO i dati locali visibili
@@ -38,7 +40,7 @@ class ExpenseRepositoryImpl @Inject constructor(
         )
         localDataSource.upsertExpense(expenseToSave)
 
-        syncWithServer()
+        // syncWithServer()
     }
 
     // La cancellazione è un soft-delete locale
@@ -57,11 +59,12 @@ class ExpenseRepositoryImpl @Inject constructor(
 
     // Il cuore della sincronizzazione
     override suspend fun syncWithServer() {
+        preferenceDataSource.setSyncing(true)
         try {
             val idToken = userRepository.getIdToken()
             if (idToken == null) {
                 Log.e("Sync", "Sincronizzazione fallita: Token non disponibile")
-                return
+                throw Exception("Sync failed: User not authenticated")
             }
             // FASE A: Invia le modifiche locali al server
             val unsyncedExpenses = localDataSource.getUnsyncedExpenses()
@@ -71,6 +74,9 @@ class ExpenseRepositoryImpl @Inject constructor(
                     // Se il server ha accettato, aggiorna l'elemento locale come "sincronizzato"
                     val syncedExpense = localExpense.copy(isSynced = true)
                     localDataSource.upsertExpense(syncedExpense)
+                } else{
+                    // If even one upsert fails, we should stop and report it.
+                    throw Exception("Sync failed during upload. Server responded with ${response.code()}")
                 }
             }
 
@@ -86,12 +92,21 @@ class ExpenseRepositoryImpl @Inject constructor(
                     // Marca tutti gli elementi ricevuti come sincronizzati e salvali
                     val syncedRemoteExpenses = remoteExpenses.map { it.copy(isSynced = true) }
                     localDataSource.upsertAll(syncedRemoteExpenses)
+                    preferenceDataSource.updateLastSyncTimestamp()
                 }
+            } else {
+                // --- KEY CHANGE HERE ---
+                // If the response is not successful, throw an exception.
+                throw Exception("Sync failed. Server responded with ${response.code()}")
             }
         } catch (e: Exception) {
             // Gestisci l'errore di rete (es. log)
             // L'app continuerà a funzionare con i dati locali
             println("Sync failed: ${e.message}")
+            throw e
+        } finally{
+            // Comunica la fine della sincronizzazione, sia in caso di successo che di fallimento
+            preferenceDataSource.setSyncing(false)
         }
     }
 }

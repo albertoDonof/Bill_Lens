@@ -1,5 +1,7 @@
 package com.example.billlens.ui.scan
 
+import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +31,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.billlens.domain.expenses.AddExpenseViewModel
 import com.example.billlens.domain.scan.ScanReceiptViewModel
 import kotlinx.coroutines.flow.collectLatest
+import java.util.Locale
+import java.util.Date
+import java.text.SimpleDateFormat
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +49,40 @@ fun TextResultScreen(
     val scanUiState by scanViewModel.uiState.collectAsStateWithLifecycle()
     val addUiState by addExpenseViewModel.uiState.collectAsStateWithLifecycle()
     var expandedCategoryDropdown by remember { mutableStateOf(false) }
+
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    // --- MODIFICA 1: CREA I FOCUS REQUESTER E LO SCROLL STATE ---
+    val coroutineScope = rememberCoroutineScope()
+    val scrollState = rememberScrollState() // Stato per controllare lo scroll
+    val notesFocusRequester = remember { FocusRequester() } // Requester per il campo 'notes'
+    val totalFocusRequester = remember { FocusRequester() } // Requester per il campo 'total'
+
+    // --- MODIFICA 2: EFFETTO PER GESTIRE IL FOCUS E LO SCROLL ---
+    // Questo LaunchedEffect si attiva ogni volta che validationErrors cambia.
+    LaunchedEffect(addUiState.validationErrors) {
+        val errors = addUiState.validationErrors
+        // Se ci sono errori, trova il primo e sposta il focus e la vista.
+        if (errors.notesError != null) {
+            // Lancia una coroutine per eseguire lo scroll e richiedere il focus.
+            coroutineScope.launch {
+                notesFocusRequester.requestFocus()
+                // Scorre fino alla cima della pagina per assicurare che il campo sia visibile.
+                scrollState.animateScrollTo(0)
+            }
+        } else if (errors.dateError != null) {
+            // Per la data, possiamo solo scrollare perché il campo è disabilitato.
+            coroutineScope.launch {
+                scrollState.animateScrollTo(200) // Un valore approssimativo per scorrere verso il basso
+            }
+        } else if (errors.totalError != null) {
+            coroutineScope.launch {
+                totalFocusRequester.requestFocus()
+                // Scorre fino alla fine della pagina per mostrare il campo 'total'.
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
+        }
+    }
 
     // Sincronizza i dati tra i due ViewModel al caricamento
     LaunchedEffect(scanUiState.extractedDetails) {
@@ -62,6 +105,44 @@ fun TextResultScreen(
         }
     }
 
+    // --- 2. IMPLEMENTAZIONE DEL DATE PICKER DIALOG ---
+    if (showDatePicker) {
+        Log.d("TextResultScreen", "DatePickerDialog should be showing now.")
+        // Tentiamo di pre-selezionare la data attuale nel picker
+        val initialDateMillis = remember(addUiState.date) {
+            try {
+                // Tenta di fare il parsing della data attuale per inizializzare il calendario
+                addUiState.date?.let { SimpleDateFormat("dd/MM/yyyy",
+                    Locale.getDefault()).parse(it)?.time }
+            } catch (e: Exception) {
+                null // Se fallisce, il picker si aprirà sulla data odierna
+            } ?: System.currentTimeMillis() // Fallback alla data/ora corrente
+        }
+
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMillis)
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDatePicker = false
+                        // Passa il timestamp (in millisecondi UTC) selezionato al ViewModel
+                        datePickerState.selectedDateMillis?.let { timestamp ->
+                            Log.d("TextResultScreen", "DatePickerDialog: New date selected with timestamp: $timestamp")
+                            addExpenseViewModel.updateDate(timestamp)
+                        }
+                    }
+                ) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -76,21 +157,34 @@ fun TextResultScreen(
         bottomBar = {
             // Tasto Salva fisso in basso per comodità
             Surface(tonalElevation = 3.dp) {
-                Button(
-                    onClick = { addExpenseViewModel.saveExpense() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .height(56.dp),
-                    enabled = !addUiState.isSaving,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    if (addUiState.isSaving) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-                    } else {
-                        Icon(Icons.Default.Check, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Save Expense", fontSize = 18.sp)
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    // --- MOSTRA L'ERRORE DELLA DATA QUI ---
+                    if (addUiState.isDateInFuture) {
+                        Text(
+                            text = "Cannot save an expense with a future date.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier
+                                .padding(bottom = 8.dp)
+                                .fillMaxWidth()
+                        )
+                    }
+                    Button(
+                        onClick = { addExpenseViewModel.saveExpense() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .height(56.dp),
+                        enabled = !addUiState.isSaving && !addUiState.isDateInFuture,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (addUiState.isSaving) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+                        } else {
+                            Icon(Icons.Default.Check, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Save Expense", fontSize = 18.sp)
+                        }
                     }
                 }
             }
@@ -100,7 +194,7 @@ fun TextResultScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -115,9 +209,16 @@ fun TextResultScreen(
                     )
                 },
                 label = { Text("Description / Notes") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth()
+                    .focusRequester(notesFocusRequester),
                 singleLine = true,
-                placeholder = { Text("e.g. Weekly Groceries") }
+                placeholder = { Text("e.g. Weekly Groceries") },
+                isError = addUiState.validationErrors.notesError != null,
+                supportingText = {
+                    if (addUiState.validationErrors.notesError != null) {
+                        Text(text = addUiState.validationErrors.notesError!!, color = MaterialTheme.colorScheme.error)
+                    }
+                }
             )
 
             OutlinedTextField(
@@ -162,22 +263,66 @@ fun TextResultScreen(
                 }
             }
 
-            OutlinedTextField(
-                value = addUiState.date ?: "",
-                onValueChange = { addExpenseViewModel.updateFields(addUiState.store, addUiState.location ,it, addUiState.total,addUiState.notes) },
-                label = { Text("Date (DD/MM/YYYY)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+            // --- 3. RENDI IL CAMPO DATA CLICCABILE E NON SCRIVIBILE ---
+            // Incapsuliamo il campo della data in un Box per isolare il click.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        onClick = {
+                            Log.d(
+                                "TextResultScreen",
+                                "Date field (Box) clicked! Setting showDatePicker to true."
+                            )
+                            showDatePicker = true
+                        },
+                        // Aggiungiamo enabled = true per chiarezza, anche se è il default
+                        enabled = true
+                    )
+            ) {
+                OutlinedTextField(
+                    value = addUiState.date ?: "",
+                    onValueChange = { /* Non facciamo nulla, è read-only */ },
+                    label = { Text("Date (DD/MM/YYYY)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    singleLine = true,
+                    // IMPORTANTE: Disabilitiamo gli eventi di input sul campo di testo stesso
+                    // per evitare conflitti con il Box.
+                    enabled = false,
+                    isError = addUiState.validationErrors.dateError != null,
+                    // Cambiamo i colori per farlo apparire "normale" e non disabilitato
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                )
+            }
+            // Mostra l'errore della data sotto il Box per visibilità
+            if (addUiState.validationErrors.dateError != null) {
+                Text(
+                    text = addUiState.validationErrors.dateError!!,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+            }
 
             OutlinedTextField(
                 value = addUiState.total ?: "",
                 onValueChange = { addExpenseViewModel.updateFields(addUiState.store,addUiState.location, addUiState.date, it, addUiState.notes) },
                 label = { Text("Total Amount") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(totalFocusRequester),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
-                prefix = { Text("€ ") }
+                prefix = { Text("€ ") },
+                isError = addUiState.validationErrors.totalError != null,
+                supportingText = {
+                    if (addUiState.validationErrors.totalError != null) {
+                        Text(text = addUiState.validationErrors.totalError!!, color = MaterialTheme.colorScheme.error)
+                    }
+                }
             )
 
             if (addUiState.errorMessage != null) {

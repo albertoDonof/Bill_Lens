@@ -1,8 +1,11 @@
 package com.example.billlens.domain.settings
 
+
+import java.util.concurrent.TimeUnit
 import androidx.compose.animation.core.copy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.billlens.data.local.PreferenceDataSource
 import com.example.billlens.data.network.NetworkDataSource
 import com.example.billlens.data.repository.ExpenseRepository
 import com.example.billlens.data.repository.UserRepository
@@ -21,6 +24,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 
 data class SettingsUiState(
     val userName: String? = null,
@@ -32,22 +38,72 @@ data class SettingsUiState(
     val successMessage: String? = null,
     val errorMessage: String? = null,
     val authorizationIntent: android.content.Intent? = null,
-    val authorizationRequest: AuthorizationRequest? = null
+    val authorizationRequest: AuthorizationRequest? = null,
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val expenseRepository: ExpenseRepository,
-    private val networkDataSource: NetworkDataSource
+    private val networkDataSource: NetworkDataSource,
+    private val preferenceDataSource: PreferenceDataSource
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState = _uiState.asStateFlow()
 
+    // Creiamo un StateFlow separato SOLO per il tempo relativo.
+    // Questo si attiverà solo quando la UI lo osserva.
+    val lastSyncRelativeTime: StateFlow<String> = flow {
+        // Combiniamo il timestamp e un ticker
+        combine(
+            preferenceDataSource.lastSyncTimestamp,
+            tickerFlow() // Usiamo una funzione helper per il ticker
+        ) { timestamp, _ ->
+            formatRelativeTime(timestamp)
+        }.collect { relativeTime ->
+            emit(relativeTime) // Emettiamo la stringa formattata
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        // CRUCIALE: si avvia quando la UI osserva e si ferma dopo 5 secondi di inattività.
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "Loading..."
+    )
+
     init {
         // Avviamo l'osservazione dei dati utente al momento della creazione
         observeUserData()
+    }
+
+    // Funzione helper per creare il ticker in modo pulito
+    private fun tickerFlow() = flow {
+        while (true) {
+            emit(Unit)
+            delay(60_000) // Emette ogni 60 secondi
+        }
+    }
+
+    private fun formatRelativeTime(timestamp: Long): String {
+        if (timestamp == 0L) return "Never"
+
+        val now = System.currentTimeMillis()
+        val diff = now - timestamp
+
+        val seconds = TimeUnit.MILLISECONDS.toSeconds(diff)
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(diff)
+        val hours = TimeUnit.MILLISECONDS.toHours(diff)
+        val days = TimeUnit.MILLISECONDS.toDays(diff)
+
+        return when {
+            seconds < 60 -> "Just now"
+            minutes < 2 -> "1 minute ago"
+            minutes < 60 -> "$minutes minutes ago"
+            hours < 2 -> "1 hour ago"
+            hours < 24 -> "$hours hours ago"
+            days == 1L -> "Yesterday"
+            else -> "$days days ago"
+        }
     }
 
     private fun observeUserData() {
@@ -142,13 +198,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun triggerSync() {
+        // Prevent multiple syncs
+        if (preferenceDataSource.isSyncing.value) return
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, errorMessage = null) }
             try {
                 expenseRepository.syncWithServer()
                 _uiState.update { it.copy(isSyncing = false, successMessage = "Data synced correctly") }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isSyncing = false, errorMessage = "Sync failed") }
+                _uiState.update { it.copy(isSyncing = false, errorMessage = "Sync failed! Retry Later.") }
             }
         }
     }

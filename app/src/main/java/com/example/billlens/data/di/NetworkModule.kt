@@ -1,6 +1,7 @@
 package com.example.billlens.data.di
 
 import com.example.billlens.data.network.BillLensApiService
+import com.example.billlens.data.network.GeocodingApiService
 import com.example.billlens.data.network.NetworkDataSource
 import com.google.gson.GsonBuilder
 import dagger.Module
@@ -21,7 +22,9 @@ object NetworkModule {
     // L'IP 10.0.2.2 è l'alias per il localhost del tuo PC dall'emulatore Android
     //private const val BASE_URL = "http://10.0.2.2:5000/"
     //Per il telefono fisico:
-    private const val BASE_URL = "http://10.154.75.78:5000/"
+    //private const val BASE_URL = "http://10.154.75.78:5000/"
+    //In Produzione:
+    private const val BASE_URL = "https://bill-lens-backend-flask-102925522228.europe-west1.run.app"
 
 
     @Provides
@@ -52,6 +55,17 @@ object NetworkModule {
     @Singleton
     fun provideApiService(retrofit: Retrofit): BillLensApiService {
         return retrofit.create(BillLensApiService::class.java)
+    }
+
+
+    @Provides
+    @Singleton
+    fun provideGeocodingApiService(): GeocodingApiService {
+        return Retrofit.Builder()
+            .baseUrl("https://geokeo.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GeocodingApiService::class.java)
     }
 
     @Provides

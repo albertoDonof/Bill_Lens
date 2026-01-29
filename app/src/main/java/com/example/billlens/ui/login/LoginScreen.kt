@@ -5,10 +5,17 @@ import android.content.Context
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -16,6 +23,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
@@ -85,30 +96,52 @@ fun LoginScreen(
     }
 
 
-    Box(
+    Column(
         modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         if (isSigningIn) {
             CircularProgressIndicator()
         } else {
+            // 1. Aggiungiamo il titolo dell'app
+            Text(
+                text = "Bill Lens",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.size(64.dp)) // Spazio tra il titolo e il bottone
+
+            // 2. Modifichiamo il bottone per includere l'icona
             Button(
                 onClick = {
                     coroutineScope.launch {
                         isSigningIn = true
-                        // Avvia il nuovo flusso di login combinato
                         performSignIn(context, viewModel) {
                             isSigningIn = false
                         }
                     }
                 }
             ) {
+                // Aggiungiamo l'icona di Google che abbiamo importato
+                Icon(
+                    painter = painterResource(id = R.drawable.google_color_svgrepo_com),
+                    contentDescription = "Google Logo",
+                    modifier = Modifier.size(ButtonDefaults.IconSize),
+                    tint = androidx.compose.ui.graphics.Color.Unspecified // Usa i colori originali del logo
+                )
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing)) // Spazio standard tra icona e testo
                 Text("Sign in with Google")
             }
         }
 
+        // Mostra l'errore sotto il bottone/loader
         state.signInError?.let { error ->
-            Text(text = error, color = androidx.compose.ui.graphics.Color.Red)
+            // Aggiungiamo un po' di spazio per non attaccare l'errore al bottone
+            Spacer(modifier = Modifier.size(16.dp))
+            Text(text = error, color = MaterialTheme.colorScheme.error)
         }
     }
 }

@@ -40,7 +40,7 @@ fun UserHeader(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().padding(top = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (!profilePictureUrl.isNullOrBlank()) {

@@ -55,7 +55,7 @@ enum class ExpenseCategory(val displayName: String, val keywords: List<String>) 
             "course", "cancelleria", "stationery"
         )
     ),
-    OTHER("Miscellaneous", emptyList());
+    OTHER("Other", emptyList());
 
     companion object {
         /**

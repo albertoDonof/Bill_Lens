@@ -29,6 +29,17 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
+data class ExpenseValidationErrors(
+    val totalError: String? = null,
+    val dateError: String? = null,
+    val notesError: String? = null
+    // Aggiungi altri campi se necessario (es. locationError)
+)
+
+
+
+
+
 data class AddExpenseUiState(
     val store: String? = null,
     val location : String? = null,
@@ -40,7 +51,9 @@ data class AddExpenseUiState(
     val imageBitmap: android.graphics.Bitmap? = null,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
-    val saved: Boolean = false
+    val saved: Boolean = false,
+    val isDateInFuture: Boolean = false,
+    val validationErrors: ExpenseValidationErrors = ExpenseValidationErrors()
 )
 
 
@@ -59,16 +72,25 @@ class AddExpenseViewModel @Inject constructor(
         val suggestedCategory = ExpenseCategory.categorize(details.fullText).displayName
         val defaultNote = details.storeName ?: ""
 
+        // --- MODIFICA 1: Usiamo la nostra funzione di parsing robusta ---
+        val parsedDate = parseDateString(details.date) // Usiamo la funzione helper
+        val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val dateString = formatter.format(parsedDate)
+
+        // --- VALIDAZIONE ANCHE QUI ---
+        val dateIsInFuture = isDateStringInFuture(details.date)
+
         _uiState.update { it.copy(
             store = details.storeName,
             location = details.storeLocation,
-            date = details.date,
+            date = dateString,
             total = details.total,
             notes = defaultNote,
             category = suggestedCategory,
             imageBitmap = bitmap,
             errorMessage = null,
-            saved = false
+            saved = false,
+            isDateInFuture = dateIsInFuture
         ) }
     }
 
@@ -77,10 +99,56 @@ class AddExpenseViewModel @Inject constructor(
     }
 
     fun updateFields(store: String?,location: String?, date: String?, total: String?, notes: String?) {
-        _uiState.value = _uiState.value.copy(store = store, location = location, date = date, total = total, notes = notes)
+        _uiState.value = _uiState.value.copy(
+            store = store,
+            location = location,
+            date = date,
+            total = total,
+            notes = notes,
+            validationErrors = ExpenseValidationErrors()
+            )
+    }
+
+    // --- NUOVA FUNZIONE PER LA DATA ---
+    fun updateDate(newTimestamp: Long) {
+        // Formattiamo il timestamp ricevuto dal DatePicker in una stringa "gg/MM/yyyy"
+        val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val dateString = formatter.format(Date(newTimestamp))
+
+        // --- VALIDAZIONE QUI ---
+        val dateIsInFuture = isDateStringInFuture(dateString)
+        _uiState.update { it.copy(date = dateString, isDateInFuture = dateIsInFuture) }
+    }
+
+    // --- NUOVA FUNZIONE DI VALIDAZIONE ---
+    private fun validateCurrentState(): Boolean {
+        val state = _uiState.value
+        val errors = ExpenseValidationErrors(
+            totalError = if (state.total.isNullOrBlank() || state.total.toBigDecimalOrNull() == null || state.total.toBigDecimal() <= BigDecimal.ZERO) "Amount cannot be empty or zero" else null,
+            dateError = if (state.date.isNullOrBlank()) "Date cannot be empty" else null,
+            notesError = if (state.notes.isNullOrBlank()) "Description cannot be empty" else null
+        )
+
+        _uiState.update { it.copy(validationErrors = errors) }
+
+        // Restituisce true se non ci sono errori
+        return errors.totalError == null && errors.dateError == null && errors.notesError == null
     }
 
     fun saveExpense() {
+
+        // 1. Esegui la validazione prima di tutto
+        val isValid = validateCurrentState()
+        if (!isValid) {
+            _uiState.update { it.copy(isSaving = false) } // Assicurati che non stia mostrando il loader
+            return // Interrompi il salvataggio se i dati non sono validi
+        }
+
+        // --- CONTROLLO AGGIUNTIVO PRIMA DI SALVARE ---
+        if (uiState.value.isDateInFuture) {
+            _uiState.update { it.copy(errorMessage = "Cannot save an expense with a future date.") }
+            return
+        }
 
         // 1. Cambiamo lo stato IMMEDIATAMENTE
         _uiState.update { it.copy(isSaving = true, errorMessage = null) }
@@ -108,7 +176,7 @@ class AddExpenseViewModel @Inject constructor(
 
 
                     // Parse date (support common formats); fallback a oggi
-                    val receiptDate: Date = parseDateOrNow(state.date)
+                    val receiptDate: Date = parseDateString(state.date)
 
                     // Map: store -> notes (perché il modello Expense non ha store), category default
                     val category = state.category
@@ -131,6 +199,20 @@ class AddExpenseViewModel @Inject constructor(
                 expenseRepository.saveExpense(expense)
                 _uiState.update { it.copy(isSaving = false, saved = true) }
                 _events.send(AddExpenseEvent.Saved)
+
+                // 4. LANCIA LA SINCRONIZZAZIONE IN BACKGROUND
+                // Lanciamo una nuova coroutine. L'app non aspetterà il suo completamento.
+                launch {
+                    try {
+                        Log.d("AddExpenseViewModel", "Starting background sync after save...")
+                        expenseRepository.syncWithServer()
+                        Log.d("AddExpenseViewModel", "Background sync successful.")
+                    } catch (syncError: Exception) {
+                        Log.e("AddExpenseViewModel", "Background sync failed: ${syncError.message}")
+                        // Qui potremmo inviare un evento a uno StateFlow condiviso per mostrare
+                        // una notifica di errore non bloccante. Per ora, lo logghiamo.
+                    }
+                }
             } catch (t: Throwable) {
                 _uiState.update { it.copy(isSaving = false, errorMessage = t.message)}
                 _events.send(AddExpenseEvent.Error(t.message ?: "Error"))
@@ -138,7 +220,19 @@ class AddExpenseViewModel @Inject constructor(
         }
     }
 
-    private fun parseDateOrNow(dateStr: String?): Date {
+    // --- NUOVA FUNZIONE DI VALIDAZIONE, più semplice ---
+    private fun isDateStringInFuture(dateStr: String?): Boolean {
+        if (dateStr.isNullOrBlank()) return false
+        return try {
+            val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+            val parsedDate = LocalDate.parse(dateStr, formatter)
+            parsedDate.isAfter(LocalDate.now())
+        } catch (e: DateTimeParseException) {
+            false
+        }
+    }
+
+    private fun parseDateString(dateStr: String?): Date {
         if (dateStr.isNullOrBlank()) return Date()
         val fourDigitYearFormats = listOf(
             "yyyy-MM-dd",

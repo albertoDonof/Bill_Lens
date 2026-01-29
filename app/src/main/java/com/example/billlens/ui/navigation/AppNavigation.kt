@@ -19,32 +19,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
 import com.example.billlens.domain.scan.ScanReceiptViewModel
+import com.example.billlens.ui.analytics.AnalyticsScreen
+import com.example.billlens.ui.expenses.AllExpensesScreen
+import com.example.billlens.ui.expenses.ExpenseDetailScreen
 import com.example.billlens.ui.home.HomeScreen
 import com.example.billlens.ui.login.LoginScreen
 import com.example.billlens.ui.scan.ScanReceiptScreen
 import com.example.billlens.ui.scan.TextResultScreen
 import com.example.billlens.ui.settings.SettingsScreen
-
-// Placeholder per le altre schermate
-// Aggiorna le altre schermate per accettare il NavController
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun StatsScreen(navController: NavHostController) {
-    // Esempio di come anche questa schermata avrà il suo Scaffold
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Statistiche") }) },
-        bottomBar = { AppBottomNavigationBar(navController = navController) }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Contenuto della schermata Statistiche")
-        }
-    }
-}
 
 const val SCAN_GRAPH_ROUTE = "scan_graph"
 /**
@@ -72,6 +54,14 @@ fun AppNavigation(
                 )
         }
 
+
+        composable(
+            route = NavigationScreens.ExpenseDetail.route,
+            arguments = listOf(navArgument("expenseId") { type = NavType.StringType })
+        ) {
+            ExpenseDetailScreen(navController = navController)
+        }
+
         navigation(
             startDestination = NavigationScreens.Home.route,
             route = "main_graph"
@@ -79,9 +69,14 @@ fun AppNavigation(
             composable(NavigationScreens.Home.route) {
                 HomeScreen(navController = navController)
             }
-            composable(NavigationScreens.Stats.route) {
-                StatsScreen(navController = navController) // Sostituisci con la tua vera schermata
+            composable(NavigationScreens.AllExpenses.route) {
+                AllExpensesScreen(navController = navController) // Per ora non ha bisogno del navController
             }
+
+            composable(NavigationScreens.Stats.route) {
+                AnalyticsScreen(navController = navController)
+            }
+
             composable(NavigationScreens.Settings.route) {
                 SettingsScreen(
                     navController = navController,

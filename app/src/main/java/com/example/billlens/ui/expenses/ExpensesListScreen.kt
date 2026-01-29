@@ -84,7 +84,8 @@ fun ExpensesListScreenContent(
         } else {
             ExpensesFeed(
                 expenses = expenses,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                onExpenseClick = {}
             )
         }
     }

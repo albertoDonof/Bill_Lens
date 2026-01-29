@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -14,6 +15,15 @@ android {
         version = release(36)
     }
 
+    val apiKeysProperties = Properties()
+    val apiKeysPropertiesFile = rootProject.file("apikeys.properties")
+    if (apiKeysPropertiesFile.exists()) {
+        apiKeysProperties.load(apiKeysPropertiesFile.inputStream())
+    }
+
+    val geokeoApiKey = apiKeysProperties.getProperty("GEOKEO_API_KEY") // Aggiunto valore di default
+    val mapsApiKey = apiKeysProperties.getProperty("MAPS_API_KEY")   // Aggiunto va
+
     defaultConfig {
         applicationId = "com.example.billlens"
         minSdk = 24
@@ -22,6 +32,16 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+
+        buildConfigField(
+            type = "String",
+            name = "GEOKEO_API_KEY",
+            value = "\"$geokeoApiKey\""
+        )
+
+
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     buildTypes {
@@ -106,4 +126,12 @@ dependencies {
     // Libreria Coil per caricare le immagini da URL (es. foto profilo Google)
     implementation("io.coil-kt:coil-compose:2.6.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // KTX for the Maps SDK for Android library
+    implementation("com.google.maps.android:maps-ktx:5.1.1")
+    // KTX for the Maps SDK for Android Utility Library
+    implementation("com.google.maps.android:maps-utils-ktx:5.1.1")
+    // Google Maps per Jetpack Compose
+    implementation("com.google.maps.android:maps-compose:6.1.2")
+    implementation("com.google.maps.android:maps-compose-utils:6.1.2")
+    implementation("com.google.maps.android:maps-compose-widgets:6.1.2")
 }
