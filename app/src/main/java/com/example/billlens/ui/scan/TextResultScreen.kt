@@ -1,6 +1,8 @@
 package com.example.billlens.ui.scan
 
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
+import android.content.pm.PackageManager
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -36,7 +39,16 @@ import java.util.Date
 import java.text.SimpleDateFormat
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
+import com.example.billlens.data.location.LocationDataSource
+import kotlinx.coroutines.flow.first
+import android.location.LocationManager
+import android.provider.Settings // <-- SOLUZIONE: Aggiungi questo import
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,11 +64,28 @@ fun TextResultScreen(
 
     var showDatePicker by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+    var showGpsEnableDialog by remember { mutableStateOf(false) }
+
     // --- MODIFICA 1: CREA I FOCUS REQUESTER E LO SCROLL STATE ---
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState() // Stato per controllare lo scroll
     val notesFocusRequester = remember { FocusRequester() } // Requester per il campo 'notes'
     val totalFocusRequester = remember { FocusRequester() } // Requester per il campo 'total'
+
+
+    // Funzione helper per controllare se il GPS è attivo
+    fun isGpsEnabled(): Boolean {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            addExpenseViewModel.onLocationPermissionResult(isGranted, isGpsEnabled())
+        }
+    )
 
     // --- MODIFICA 2: EFFETTO PER GESTIRE IL FOCUS E LO SCROLL ---
     // Questo LaunchedEffect si attiva ogni volta che validationErrors cambia.
@@ -98,11 +127,48 @@ fun TextResultScreen(
                 is AddExpenseViewModel.AddExpenseEvent.Saved -> {
                     onSaveSuccess()
                 }
+                is AddExpenseViewModel.AddExpenseEvent.RequestLocationPermission -> {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                        // Se il permesso c'è già, controlla subito il GPS
+                        addExpenseViewModel.onLocationPermissionResult(true, isGpsEnabled())
+                    } else {
+                        // Altrimenti, lancia la richiesta di permesso
+                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    }
+                }
+                is AddExpenseViewModel.AddExpenseEvent.RequestGpsEnable -> {
+                    showGpsEnableDialog = true // Il ViewModel chiede di mostrare il dialogo
+                }
                 is AddExpenseViewModel.AddExpenseEvent.Error -> {
                     // Opzionale: gestire l'errore qui (es. mostrare Snackbar)
                 }
             }
         }
+    }
+
+    // Dialogo per chiedere di attivare il GPS
+    if (showGpsEnableDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showGpsEnableDialog = false
+                addExpenseViewModel.onGpsEnableDeclined() // L'utente chiude il dialogo, salva senza GPS
+            },
+            title = { Text("Enable GPS") },
+            text = { Text("To improve address accuracy, please enable your device's GPS. Would you like to save without it?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showGpsEnableDialog = false
+                    // Apri le impostazioni di localizzazione del telefono
+                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }) { Text("Enable GPS") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showGpsEnableDialog = false
+                    addExpenseViewModel.onGpsEnableDeclined() // Salva senza GPS
+                }) { Text("Save Without") }
+            }
+        )
     }
 
     // --- 2. IMPLEMENTAZIONE DEL DATE PICKER DIALOG ---
@@ -170,20 +236,42 @@ fun TextResultScreen(
                         )
                     }
                     Button(
-                        onClick = { addExpenseViewModel.saveExpense() },
+                        onClick = { addExpenseViewModel.onSaveClicked() },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp)
                             .height(56.dp),
-                        enabled = !addUiState.isSaving && !addUiState.isDateInFuture,
+                        enabled = !addUiState.isSaving && !addUiState.isDateInFuture && !addUiState.isFetchingLocation,
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        if (addUiState.isSaving) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-                        } else {
-                            Icon(Icons.Default.Check, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Save Expense", fontSize = 18.sp)
+                        // Usiamo un 'when' per cambiare il contenuto del bottone in base allo stato
+                        when {
+                            // Stato 1: Sta ottenendo la posizione GPS
+                            addUiState.isFetchingLocation -> {
+                                Text("Fetching location...")
+                                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary, // Colore che contrasta con lo sfondo del bottone
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                            // Stato 2: Sta salvando (dopo aver ottenuto la posizione)
+                            addUiState.isSaving -> {
+                                Text("Saving...")
+                                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                            // Stato 3: Stato normale, pronto per il click
+                            else -> {
+                                Icon(Icons.Default.Check, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Save Expense", fontSize = 18.sp)
+                            }
                         }
                     }
                 }
@@ -209,7 +297,8 @@ fun TextResultScreen(
                     )
                 },
                 label = { Text("Description / Notes") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
                     .focusRequester(notesFocusRequester),
                 singleLine = true,
                 placeholder = { Text("e.g. Weekly Groceries") },
@@ -313,7 +402,9 @@ fun TextResultScreen(
                 value = addUiState.total ?: "",
                 onValueChange = { addExpenseViewModel.updateFields(addUiState.store,addUiState.location, addUiState.date, it, addUiState.notes) },
                 label = { Text("Total Amount") },
-                modifier = Modifier.fillMaxWidth().focusRequester(totalFocusRequester),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(totalFocusRequester),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 prefix = { Text("€ ") },
@@ -332,7 +423,7 @@ fun TextResultScreen(
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
             // Sezione 2: Testo Completo (Riferimento)
-            Text("Complete Text", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
+            Text("Complete Text Scanned", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
 
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),

@@ -44,7 +44,7 @@ fun AllExpensesScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = viewModel::onSearchQueryChanged,
-                label = { Text("Search by description or store...") },
+                label = { Text("Search by description...") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 modifier = Modifier
                     .fillMaxWidth()

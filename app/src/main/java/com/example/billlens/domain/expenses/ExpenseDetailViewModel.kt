@@ -55,7 +55,11 @@ class ExpenseDetailViewModel @Inject constructor(
             // Troviamo la spesa specifica nel repository
             val expense = expenseRepository.allExpenses.first().find { it.id == expenseId }
             if (expense != null) {
-                _uiState.update { it.copy(expense = expense, isLoading = false) }
+                _uiState.update { it.copy(
+                    expense = expense,
+                    isLoading = false,
+                    totalInput = expense.totalAmount.toPlainString()
+                ) }
             } else {
                 _uiState.update { it.copy(isLoading = false, errorMessage = "Expense not found") }
             }
@@ -63,11 +67,10 @@ class ExpenseDetailViewModel @Inject constructor(
     }
 
     fun onFieldChange(notes: String, total: String, category: String, location: String) {
-        val currentExpense = _uiState.value.expense ?: return
 
         _uiState.update {
             it.copy(
-                expense = currentExpense.copy(
+                expense = it.expense?.copy(
                     notes = notes,
                     category = category,
                     storeLocation = location
@@ -107,7 +110,7 @@ class ExpenseDetailViewModel @Inject constructor(
                     totalAmount = _uiState.value.totalInput.toBigDecimalOrNull() ?: BigDecimal.ZERO
                 )
                 _uiState.update { it.copy(isSaving = true) }
-                expenseRepository.saveExpense(expense) // saveExpense fa già un upsert
+                expenseRepository.saveExpense(updatedExpense) // saveExpense fa già un upsert
                 // Lancia la sincronizzazione in background
                 launch {
                     try {
@@ -135,6 +138,7 @@ class ExpenseDetailViewModel @Inject constructor(
     private fun validateCurrentState(): Boolean {
         val expense = _uiState.value.expense
         val totalInput = _uiState.value.totalInput
+        val notes = expense?.notes
         if (expense == null) return false
 
         val errors = ExpenseValidationErrors(

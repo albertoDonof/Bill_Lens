@@ -6,6 +6,7 @@ import androidx.compose.animation.core.copy
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.billlens.BuildConfig
 import com.example.billlens.data.repository.ExpenseRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
@@ -28,6 +29,10 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
+import kotlinx.coroutines.flow.first
+import com.example.billlens.data.location.LocationDataSource
+import com.example.billlens.data.network.GeocodingApiService
+import com.google.android.gms.maps.model.LatLng
 
 data class ExpenseValidationErrors(
     val totalError: String? = null,
@@ -35,9 +40,6 @@ data class ExpenseValidationErrors(
     val notesError: String? = null
     // Aggiungi altri campi se necessario (es. locationError)
 )
-
-
-
 
 
 data class AddExpenseUiState(
@@ -50,6 +52,7 @@ data class AddExpenseUiState(
     val availableCategories: List<String> = ExpenseCategory.entries.map { it.displayName },
     val imageBitmap: android.graphics.Bitmap? = null,
     val isSaving: Boolean = false,
+    val isFetchingLocation: Boolean = false,
     val errorMessage: String? = null,
     val saved: Boolean = false,
     val isDateInFuture: Boolean = false,
@@ -59,7 +62,9 @@ data class AddExpenseUiState(
 
 @HiltViewModel
 class AddExpenseViewModel @Inject constructor(
-    private val expenseRepository: ExpenseRepository
+    private val expenseRepository: ExpenseRepository,
+    private val locationDataSource: LocationDataSource,
+    private val geocodingApiService: GeocodingApiService
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AddExpenseUiState())
     val uiState = _uiState.asStateFlow()
@@ -135,59 +140,153 @@ class AddExpenseViewModel @Inject constructor(
         return errors.totalError == null && errors.dateError == null && errors.notesError == null
     }
 
-    fun saveExpense() {
-
-        // 1. Esegui la validazione prima di tutto
-        val isValid = validateCurrentState()
-        if (!isValid) {
-            _uiState.update { it.copy(isSaving = false) } // Assicurati che non stia mostrando il loader
-            return // Interrompi il salvataggio se i dati non sono validi
-        }
-
-        // --- CONTROLLO AGGIUNTIVO PRIMA DI SALVARE ---
-        if (uiState.value.isDateInFuture) {
-            _uiState.update { it.copy(errorMessage = "Cannot save an expense with a future date.") }
+    // --- CORREZIONE 1: La validazione avviene QUI, una sola volta. ---
+    fun onSaveClicked() {
+        // Esegui la validazione come primo passo.
+        if (!validateCurrentState() || uiState.value.isDateInFuture) {
+            // Se non è valido, la UI mostrerà gli errori grazie all'update
+            // dello stato fatto dentro validateCurrentState(). La funzione si interrompe qui.
+            Log.d("AddExpenseVM", "Validation failed. Save process stopped.")
             return
         }
 
-        // 1. Cambiamo lo stato IMMEDIATAMENTE
-        _uiState.update { it.copy(isSaving = true, errorMessage = null) }
+        // Se la validazione ha successo, invia un evento alla UI per chiedere i permessi di localizzazione.
         viewModelScope.launch {
+            _events.send(AddExpenseEvent.RequestLocationPermission)
+        }
+    }
+
+    // Chiamato dalla UI dopo che l'utente ha risposto alla richiesta di permesso
+    fun onLocationPermissionResult(isGranted: Boolean, isGpsEnabled: Boolean) {
+        viewModelScope.launch {
+            if (!isGranted) {
+                // Se il permesso è negato, salva subito senza arricchire l'indirizzo.
+                Log.w("AddExpenseVM", "Location permission denied. Saving without enriching address.")
+                performSave(null)
+                return@launch
+            }
+
+            // Se il permesso è concesso, ma il GPS è spento...
+            if (!isGpsEnabled) {
+                // ... invia un evento alla UI per chiedere all'utente di attivarlo.
+                _events.send(AddExpenseEvent.RequestGpsEnable)
+                return@launch
+            }
+
+            // Se permesso concesso E GPS attivo, procedi a ottenere la posizione.
+            _uiState.update { it.copy(isFetchingLocation = true) } // <-- Attiva lo stato di attesa GPS
+            // Usiamo 'withContext' per assicurarci di attendere il risultato
+            // e per spostare questa operazione potenzialmente lunga su un thread di background.
+            val location = withContext(Dispatchers.IO) {
+                locationDataSource.fetchCurrentLocationWithTimeout()
+            }
+
+
+            if (location == null) {
+                Log.w("AddExpenseVM", "Could not get location (timeout or other error).")
+            }
+            // Chiama la funzione di salvataggio finale, passando la posizione (o null se è andata in timeout).
+            performSave(location)
+        }
+    }
+
+    // Funzione chiamata se l'utente rifiuta di attivare il GPS nel dialogo
+    fun onGpsEnableDeclined() {
+        // L'utente non vuole attivare il GPS, procediamo a salvare senza arricchimento.
+        performSave(null)
+    }
+
+    // --- CORREZIONE 2: Rinominata e semplificata la funzione di salvataggio ---
+    // Questa funzione è ora privata e non esegue più la validazione.
+    private fun performSave(currentLocation: LatLng?) {
+        // Aggiorna la UI per mostrare che il salvataggio è iniziato
+        _uiState.update { it.copy(isFetchingLocation = false, isSaving = true, errorMessage = null) }
+
+        viewModelScope.launch { // Coroutine principale (Dispatcher.Main)
             try {
+                val state = _uiState.value
+                var enrichedLocation = state.location ?: ""
 
-                val expense = withContext(Dispatchers.Default) {
-                    val state = _uiState.value
-                    /*
-                    val imageBytes = state.imageBitmap?.let { bitmap ->
-                        // semplice conversione PNG, adattare se serve compressione diversa
-                        val stream = java.io.ByteArrayOutputStream()
-                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, stream)
-                        stream.toByteArray()
-                    } */
+                // --- LOG 1: VERIFICA I DATI IN INGRESSO ---
+                Log.d("AddExpenseVM_DEBUG", "Entering performSave. CurrentLocation: $currentLocation, State.Location: '${state.location}'")
 
-                    // Parse total in BigDecimal
-                    val totalAmount = try {
-                        if (!state.total.isNullOrBlank()) BigDecimal(state.total) else BigDecimal.ZERO
+
+                // --- MODIFICA 1: Esegui la chiamata di rete QUI, nel contesto giusto ---
+                // Se abbiamo una posizione e un indirizzo parziale, tentiamo l'arricchimento.
+                if (currentLocation != null && !(state.location.isNullOrBlank())) {
+
+                    // --- LOG 2: CONFERMA CHE STIAMO PER FARE LA CHIAMATA DI RETE ---
+                    Log.d("AddExpenseVM_DEBUG", "Attempting reverse geocoding for Lat: ${currentLocation.latitude}, Lng: ${currentLocation.longitude}")
+
+                    try {
+                        val response = geocodingApiService.reverseGeocode(
+                        currentLocation.latitude,
+                        currentLocation.longitude,
+                        BuildConfig.GEOKEO_API_KEY
+                        )
+
+                        // --- LOG 3: ANALIZZA LA RISPOSTA RICEVUTA ---
+                        Log.d("AddExpenseVM_DEBUG", "Reverse geocoding response received. Code: ${response.code()}, isSuccessful: ${response.isSuccessful}")
+
+
+
+                        if (response.isSuccessful) {
+                            val responseBody = response.body()
+                            if (responseBody != null) {
+                                Log.d("AddExpenseVM_DEBUG", "Response body is not null. Results count: ${responseBody.results.size}")
+
+                                // --- SOLUZIONE CHIAVE QUI: LOGICA DI FALLBACK ---
+                                val addressComponents = responseBody.results.firstOrNull()?.addressComponents
+
+                                if (addressComponents != null) {
+                                    // Tentiamo di estrarre la città con una logica di fallback,
+                                    // controllando più campi in ordine di probabilità.
+                                    val cityName = addressComponents.city
+                                        ?: addressComponents.subdistrict // <-- Per Roma, GeoKeo usa "subdistrict"
+                                        ?: addressComponents.district    // <-- A volte potrebbe essere il "district"
+                                        ?: addressComponents.county      // <-- Come ultima spiaggia, la provincia
+
+                                    if (!cityName.isNullOrBlank()) {
+                                        Log.d("AddExpenseVM_DEBUG", "City/area found: '$cityName'. Current location: '$enrichedLocation'")
+                                        if (!enrichedLocation.contains(cityName, ignoreCase = true)) {
+                                            enrichedLocation = "$enrichedLocation, $cityName"
+                                            Log.d("AddExpenseVM", "Address enriched successfully: $enrichedLocation")
+                                        } else {
+                                            Log.d("AddExpenseVM_DEBUG", "City '$cityName' is already in the address. No changes made.")
+                                        }
+                                    } else {
+                                        Log.w("AddExpenseVM_DEBUG", "No usable city, subdistrict, district, or county found in the first result.")
+                                    }
+                                } else {
+                                    Log.w("AddExpenseVM_DEBUG", "Address components are null in the first result.")
+                                }
+                            } else {
+                                Log.w("AddExpenseVM_DEBUG", "Response body is null despite a successful call.")
+                            }
+                        }
                     } catch (e: Exception) {
-                        BigDecimal.ZERO
+                        // Questo log è fondamentale se la chiamata di rete stessa fallisce (es. no internet)
+                        Log.e("AddExpenseVM_DEBUG", "A network exception occurred during reverse geocoding.", e)
                     }
-                    val location = state.location ?: ""
-                    val store = state.store ?: ""
+                } else {
+                    // --- LOG 6: CAPIAMO PERCHÉ L'ARRICCHIMENTO È STATO SALTATO ---
+                    Log.w("AddExpenseVM_DEBUG", "Skipping address enrichment. Reason: currentLocation is null or state.location is blank.")
+                }
 
-
-                    // Parse date (support common formats); fallback a oggi
+                // --- MODIFICA 2: Usa withContext solo per la creazione dell'oggetto ---
+                // Questo è un lavoro leggero, quindi Dispatchers.Default è appropriato.
+                val expense = withContext(Dispatchers.Default) {
+                    val totalAmount = state.total?.toBigDecimalOrNull() ?: BigDecimal.ZERO
                     val receiptDate: Date = parseDateString(state.date)
-
-                    // Map: store -> notes (perché il modello Expense non ha store), category default
-                    val category = state.category
-                    val notes = state.notes ?: store
-
+                    val notes = state.notes ?: (state.store ?: "")
                     val now = Date()
+
                     Expense(
                         totalAmount = totalAmount,
                         receiptDate = receiptDate,
-                        category = category,
-                        storeLocation = location,
+                        category = state.category,
+                        // --- Usa la variabile 'enrichedLocation' ---
+                        storeLocation = enrichedLocation,
                         notes = notes,
                         insertionDate = now,
                         lastUpdated = now,
@@ -196,25 +295,20 @@ class AddExpenseViewModel @Inject constructor(
                     )
                 }
 
+                // Il resto della logica rimane invariato
                 expenseRepository.saveExpense(expense)
                 _uiState.update { it.copy(isSaving = false, saved = true) }
                 _events.send(AddExpenseEvent.Saved)
 
-                // 4. LANCIA LA SINCRONIZZAZIONE IN BACKGROUND
-                // Lanciamo una nuova coroutine. L'app non aspetterà il suo completamento.
                 launch {
                     try {
-                        Log.d("AddExpenseViewModel", "Starting background sync after save...")
                         expenseRepository.syncWithServer()
-                        Log.d("AddExpenseViewModel", "Background sync successful.")
                     } catch (syncError: Exception) {
-                        Log.e("AddExpenseViewModel", "Background sync failed: ${syncError.message}")
-                        // Qui potremmo inviare un evento a uno StateFlow condiviso per mostrare
-                        // una notifica di errore non bloccante. Per ora, lo logghiamo.
+                        Log.e("AddExpenseVM", "Background sync failed after save: ${syncError.message}")
                     }
                 }
             } catch (t: Throwable) {
-                _uiState.update { it.copy(isSaving = false, errorMessage = t.message)}
+                _uiState.update { it.copy(isSaving = false, errorMessage = t.message) }
                 _events.send(AddExpenseEvent.Error(t.message ?: "Error"))
             }
         }
@@ -295,6 +389,8 @@ class AddExpenseViewModel @Inject constructor(
 
     sealed class AddExpenseEvent {
         object Saved : AddExpenseEvent()
+        object RequestLocationPermission : AddExpenseEvent()
+        object RequestGpsEnable : AddExpenseEvent()
         data class Error(val message: String) : AddExpenseEvent()
     }
 }

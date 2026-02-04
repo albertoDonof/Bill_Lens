@@ -22,22 +22,18 @@ import com.example.billlens.domain.analytics.CategorySpending
 import kotlin.math.min
 import android.graphics.Paint
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.sp
 import com.example.billlens.domain.analytics.MonthlySpending
+import java.util.Collections
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.ui.graphics.drawscope.rotate // <-- Importa la funzione di rotazione corretta
 
-/**
- * Un set di colori predefiniti e accattivanti da ciclare per i grafici.
- */
-val chartColors = listOf(
-    Color(0xFFF44336), Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFF673AB7),
-    Color(0xFF3F51B5), Color(0xFF2196F3), Color(0xFF03A9F4), Color(0xFF00BCD4),
-    Color(0xFF009688), Color(0xFF4CAF50), Color(0xFF8BC34A), Color(0xFFCDDC39)
-)
+
 
 /**
  * Disegna un grafico a torta (Pie Chart) usando il Canvas.
@@ -125,47 +121,77 @@ fun BarChart(
         animationProgress.snapTo(0f)
         animationProgress.animateTo(1f, animationSpec = tween(durationMillis = 1000))
     }
-    val textSizeSp = 12.sp
-    // Paint per il testo sotto le barre
-    val textPaint = remember {
+
+    val monthLabelTextPaint = remember {
         Paint().apply {
             textAlign = Paint.Align.CENTER
         }
     }
 
+    val axisLabelTextPaint = remember {
+        Paint().apply {
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+    }
+
     val labelColor = MaterialTheme.colorScheme.onSurface.toArgb()
 
-    Canvas(modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp)) {
-        textPaint.textSize = textSizeSp.toPx()
-        textPaint.color = labelColor
+    Canvas(modifier = modifier.fillMaxSize()) { // 'this' qui dentro è un DrawScope
+        monthLabelTextPaint.color = labelColor
+        axisLabelTextPaint.color = labelColor
 
-        // --- MODIFICA 2: Calcola il massimo basandosi sui nuovi dati ---
+        // --- SOLUZIONE 'toPx' ---
+        // Ora possiamo chiamare .toPx() perché siamo dentro un DrawScope
+        monthLabelTextPaint.textSize = 12.sp.toPx()
+        axisLabelTextPaint.textSize = 14.sp.toPx()
+
         val maxSpending = data.maxOfOrNull { it.totalAmount }?.toFloat() ?: 0f
-        if (maxSpending == 0f) return@Canvas
+
+        val yAxisLabelOffset = 40.dp.toPx()
+        val xAxisLabelOffset = 40.dp.toPx()
 
         val barCount = data.size
         val spaceBetweenBars = 16.dp.toPx()
-        val barWidth = (size.width - (barCount - 1) * spaceBetweenBars) / barCount
-        val canvasHeight = size.height - 24.dp.toPx() // Lascia spazio sotto per le etichette
 
-        data.forEachIndexed { index, monthlySpending -> // <-- USA I NUOVI DATI
-            // --- MODIFICA 3: Calcola l'altezza usando il nuovo oggetto ---
-            val barHeight = (monthlySpending.totalAmount.toFloat() / maxSpending) * canvasHeight * animationProgress.value
-            val startX = index * (barWidth + spaceBetweenBars)
+        val drawingWidth = size.width - yAxisLabelOffset
+        val drawingHeight = size.height - xAxisLabelOffset
 
-            // Disegna la barra (questa parte non cambia)
+        val barWidth = if (barCount > 0) (drawingWidth - (barCount - 1) * spaceBetweenBars) / barCount else 0f
+
+        // --- SOLUZIONE 'save', 'rotate', 'restore' ---
+        // Usiamo la funzione 'rotate' fornita dal DrawScope
+        rotate(
+            degrees = -90f,
+            pivot = Offset(x = yAxisLabelOffset / 2, y = drawingHeight / 2) // Ruota attorno al centro dell'area dell'etichetta
+        ) {
+            // Disegniamo il testo ruotato. Le coordinate ora sono relative al pivot.
+            drawContext.canvas.nativeCanvas.drawText(
+                "Amount (€)",
+                yAxisLabelOffset / 2, // x (ora verticale)
+                drawingHeight / 2 + axisLabelTextPaint.textSize / 3, // y (ora orizzontale)
+                axisLabelTextPaint
+            )
+        }
+        // Il blocco 'rotate' gestisce save/restore implicitamente, quindi non servono chiamate manuali.
+
+        if (maxSpending == 0f) return@Canvas
+
+        data.forEachIndexed { index, monthlySpending ->
+            val barHeight = (monthlySpending.totalAmount.toFloat() / maxSpending) * drawingHeight * animationProgress.value
+            val startX = yAxisLabelOffset + index * (barWidth + spaceBetweenBars)
+
             drawRect(
                 color = chartColors[index % chartColors.size],
-                topLeft = Offset(x = startX, y = canvasHeight - barHeight),
+                topLeft = Offset(x = startX, y = drawingHeight - barHeight),
                 size = Size(width = barWidth, height = barHeight)
             )
 
-            // --- MODIFICA 4: Disegna l'etichetta del mese ---
             drawContext.canvas.nativeCanvas.drawText(
-                monthlySpending.monthLabel, // Usa l'etichetta del mese (es. "Gen", "Feb")
-                startX + barWidth / 2, // Centra orizzontalmente rispetto alla barra
-                canvasHeight + 20.dp.toPx(), // Posiziona sotto la barra
-                textPaint
+                monthlySpending.monthLabel,
+                startX + barWidth / 2,
+                drawingHeight + 20.dp.toPx(),
+                monthLabelTextPaint
             )
         }
     }

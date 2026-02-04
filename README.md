@@ -1,4 +1,6 @@
 # Project Name: Bill Lens
+> **Note:** This repository contains the Android Client source code.
+> 🔗 **Backend Repository:** The Flask Backend API implementation can be found here: [bill-lens-backend](https://github.com/albertoDonof/bill-lens-backend)
 ## 1. Purpose:
    **Bill Lens** is an automated expense tracking application designed to streamline personal finance management. By leveraging machine learning, optical character recognition (OCR), and geospatial technology, Bill Lens eliminates manual data entry. It allows users to digitize receipts instantly, visualize their spending habits through interactive analytics, and track the physical locations of their expenses on an interactive map.
 ## 2. Main Functionalities:

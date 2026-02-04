@@ -22,10 +22,12 @@ import com.example.billlens.domain.analytics.TimeFilter
 import com.example.billlens.ui.navigation.AppBottomNavigationBar
 import com.example.billlens.utils.CurrencyFormatter
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ModifierLocalBeyondBoundsLayout
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.billlens.domain.analytics.AnalyticsUiState
@@ -169,7 +171,11 @@ fun CategoryAnalyticsContent(
                 items(
                     uiState.categorySpendings,
                     key = { it.categoryName }) { categorySpending ->
-                    CategorySpendingItem(item = categorySpending)
+                    // Calcoliamo l'indice della spesa corrente nella lista
+                    val index = uiState.categorySpendings.indexOf(categorySpending)
+                    // Usiamo lo stesso calcolo del PieChart per ottenere il colore corretto
+                    val color = chartColors[index % chartColors.size]
+                    CategorySpendingItem(item = categorySpending , color = color)
                     HorizontalDivider()
                 }
             }
@@ -280,13 +286,20 @@ private fun TimeFilterSelection(
 }
 
 @Composable
-private fun CategorySpendingItem(item: CategorySpending) {
+private fun CategorySpendingItem(item: CategorySpending, color: Color) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // --- MODIFICA 2: Aggiungi l'indicatore colorato ---
+        Box(
+            modifier = Modifier
+                .size(16.dp)
+                .background(color, shape = CircleShape) // Disegna un cerchio con il colore passato
+        )
+
         // Potresti aggiungere un'icona della categoria qui in futuro
         Column(modifier = Modifier.weight(1f)) {
             Text(
